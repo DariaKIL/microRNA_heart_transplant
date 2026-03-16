@@ -1,0 +1,20 @@
+# R temporary files
+.Rhistory
+.RData
+.Rproj.user/
+
+# macOS
+.DS_Store
+
+# R markdown intermediate files
+*_cache/
+*_files/
+
+# large data
+data/*.csv
+
+# results
+results/
+
+# logs
+*.log
