@@ -34,21 +34,18 @@ The repository is organized to ensure full reproducibility of the figures and st
 ├── pictures_transpl/                      # Output directory for generated figures
 │
 ├── microRNA_transplant.Rmd                # Part 1: Main DESeq2 pipeline
-└── microRNA_transplant_enrich.Rmd         # Part 2: Target prediction & Networks
+├── microRNA_transplant_enrich.Rmd         # Part 2: Target prediction & Networks
+└── README.md
 ```
 ## Analysis Pipeline
 **1. Differential Expression Analysis (microRNA_transplant.Rmd)**  
 
 This notebook covers the primary processing of the small RNA-seq data:
 
-*Quality Control & Exploratory Data Analysis:* RNA class distribution (Figure 1A) and PCA/Sample distance heatmap.
-
-*DESeq2 Modeling:* Pairwise comparisons (e.g., AMR vs. NR) with apeglm LFC shrinkage.
-
-*Covariate Adjustments:* Models adjusted for HLA sensitization status (~ antibody + condition).
-
-*Multi-group Analysis (LRT):* Likelihood Ratio Test to identify miRNAs with significant changes across any clinical condition.
-
+*Quality Control & Exploratory Data Analysis:* RNA class distribution (Figure 1A) and PCA/Sample distance heatmap.  
+*DESeq2 Modeling:* Pairwise comparisons (e.g., AMR vs. NR) with apeglm LFC shrinkage.  
+*Covariate Adjustments:* Models adjusted for HLA sensitization status (~ antibody + condition).  
+*Multi-group Analysis (LRT):* Likelihood Ratio Test to identify miRNAs with significant changes across any clinical condition.   
 *Visualizations:* Volcano plots, Venn diagrams (transcriptome intersections), and normalized expression boxplots.
 
 **2. Target Prediction & Enrichment (microRNA_transplant_enrich.Rmd)**  
@@ -56,9 +53,7 @@ This notebook covers the primary processing of the small RNA-seq data:
 This notebook explores the biological role of the identified candidate miRNAs:  
 
 *In Silico Target Prediction:* Retrieval of experimentally validated targets from miRTarBase via multiMiR.  
-
 *Functional Enrichment:* GO (Biological Process) and Reactome pathway analysis using clusterProfiler.  
-
 *Network Analysis:* Construction of miRNA-mRNA interaction networks identifying central "hub" genes, visualized with ggraph.  
 
 ## 📊 HTML Reports
