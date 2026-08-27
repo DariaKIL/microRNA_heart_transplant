@@ -650,18 +650,18 @@
 <line x1='288.67' y1='341.00' x2='288.67' y2='102.59' style='stroke-width: 0.85; stroke-dasharray: 7.97,3.41; stroke-linecap: butt;' />
 <line x1='334.56' y1='341.00' x2='334.56' y2='102.59' style='stroke-width: 0.85; stroke-dasharray: 7.97,3.41; stroke-linecap: butt;' />
 <line x1='59.18' y1='273.77' x2='564.04' y2='273.77' style='stroke-width: 0.85; stroke-dasharray: 7.97,3.41; stroke-linecap: butt;' />
-<line x1='379.97' y1='267.12' x2='383.01' y2='269.35' style='stroke-width: 1.07; stroke: #1A1A1A;' />
-<polygon points='382.34,267.38 379.97,267.12 380.93,269.30 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
-<line x1='382.62' y1='272.50' x2='386.83' y2='270.45' style='stroke-width: 1.07; stroke: #1A1A1A;' />
-<polygon points='383.95,270.52 382.62,272.50 384.99,272.67 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
-<line x1='417.40' y1='267.41' x2='413.17' y2='269.51' style='stroke-width: 1.07; stroke: #1A1A1A;' />
-<polygon points='416.08,269.40 417.40,267.41 415.02,267.26 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
-<line x1='442.59' y1='272.51' x2='438.36' y2='270.45' style='stroke-width: 1.07; stroke: #1A1A1A;' />
-<polygon points='440.21,272.67 442.59,272.51 441.25,270.53 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
-<text x='334.23' y='267.07' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='87.88px' lengthAdjust='spacingAndGlyphs'>hsa-miR-125b-5p</text>
-<text x='366.81' y='282.44' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='81.55px' lengthAdjust='spacingAndGlyphs'>hsa-miR-152-3p</text>
-<text x='429.31' y='265.61' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='87.88px' lengthAdjust='spacingAndGlyphs'>hsa-miR-193b-5p</text>
-<text x='458.70' y='282.45' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='87.88px' lengthAdjust='spacingAndGlyphs'>hsa-miR-5588-5p</text>
+<line x1='380.30' y1='272.74' x2='383.03' y2='270.63' style='stroke-width: 1.07; stroke: #1A1A1A;' />
+<polygon points='381.20,270.54 380.30,272.74 382.66,272.42 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
+<line x1='382.60' y1='267.45' x2='386.83' y2='269.51' style='stroke-width: 1.07; stroke: #1A1A1A;' />
+<polygon points='384.98,267.29 382.60,267.45 383.94,269.43 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
+<line x1='417.27' y1='272.48' x2='413.18' y2='270.45' style='stroke-width: 1.07; stroke: #1A1A1A;' />
+<polygon points='414.90,272.63 417.27,272.48 415.95,270.49 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
+<line x1='442.61' y1='267.44' x2='438.36' y2='269.51' style='stroke-width: 1.07; stroke: #1A1A1A;' />
+<polygon points='441.27,269.42 442.61,267.44 440.23,267.28 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
+<text x='334.56' y='281.04' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='87.88px' lengthAdjust='spacingAndGlyphs'>hsa-miR-125b-5p</text>
+<text x='366.91' y='265.65' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='81.55px' lengthAdjust='spacingAndGlyphs'>hsa-miR-152-3p</text>
+<text x='429.59' y='282.42' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='87.88px' lengthAdjust='spacingAndGlyphs'>hsa-miR-193b-5p</text>
+<text x='458.85' y='265.64' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='87.88px' lengthAdjust='spacingAndGlyphs'>hsa-miR-5588-5p</text>
 <polyline points='59.18,341.00 59.18,102.59 ' style='stroke-width: 1.71; stroke-linecap: butt;' />
 <text x='48.43' y='336.61' text-anchor='end' style='font-size: 18.00px;fill: #4D4D4D; font-family: "Arial";' textLength='10.02px' lengthAdjust='spacingAndGlyphs'>0</text>
 <text x='48.43' y='293.26' text-anchor='end' style='font-size: 18.00px;fill: #4D4D4D; font-family: "Arial";' textLength='10.02px' lengthAdjust='spacingAndGlyphs'>1</text>
@@ -701,13 +701,13 @@
 <text transform='translate(28.11,225.61) rotate(-90)' style='font-size: 12.60px; font-family: "Arial";' textLength='14.00px' lengthAdjust='spacingAndGlyphs'>10</text>
 <text transform='translate(24.84,211.61) rotate(-90)' style='font-size: 18.00px; font-family: "Symbol";' textLength='4.50px' lengthAdjust='spacingAndGlyphs'> </text>
 <text transform='translate(24.84,207.11) rotate(-90)' style='font-size: 18.00px; font-family: "Arial";' textLength='36.03px' lengthAdjust='spacingAndGlyphs'>Padj</text>
-<rect x='154.00' y='40.59' width='315.24' height='38.08' style='stroke-width: 2.33; stroke: none; fill: #FFFFFF;' />
-<circle cx='173.04' cy='59.63' r='6.11' style='stroke-width: 1.55; fill: #000000;' />
-<circle cx='230.57' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #CBD5E8; fill: #CBD5E8;' />
-<circle cx='322.33' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #FF0000; fill: #FF0000;' />
-<text x='192.08' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='19.45px' lengthAdjust='spacingAndGlyphs'>NS</text>
-<text x='249.62' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='53.67px' lengthAdjust='spacingAndGlyphs'>Log2 FC</text>
-<text x='341.37' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='115.91px' lengthAdjust='spacingAndGlyphs'>p-adj and Log2 FC</text>
+<rect x='136.88' y='40.59' width='349.47' height='38.08' style='stroke-width: 2.33; stroke: none; fill: #FFFFFF;' />
+<circle cx='155.92' cy='59.63' r='6.11' style='stroke-width: 1.55; fill: #000000;' />
+<circle cx='213.46' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #CBD5E8; fill: #CBD5E8;' />
+<circle cx='305.21' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #FF0000; fill: #FF0000;' />
+<text x='174.96' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='19.45px' lengthAdjust='spacingAndGlyphs'>NS</text>
+<text x='232.50' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='53.67px' lengthAdjust='spacingAndGlyphs'>Log2 FC</text>
+<text x='324.25' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='150.14px' lengthAdjust='spacingAndGlyphs'>p-adjusted and Log2 FC</text>
 <text x='59.18' y='24.84' style='font-size: 18.00px; font-weight: bold; font-family: "Arial";' textLength='107.70px' lengthAdjust='spacingAndGlyphs'>AMR vs CAV</text>
 <text x='564.04' y='417.10' text-anchor='end' style='font-size: 14.00px; font-family: "Arial";' textLength='125.64px' lengthAdjust='spacingAndGlyphs'>total = 642 variables</text>
 </g>

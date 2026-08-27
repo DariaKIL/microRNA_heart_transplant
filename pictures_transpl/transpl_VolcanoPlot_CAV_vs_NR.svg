@@ -650,12 +650,12 @@
 <line x1='288.67' y1='341.00' x2='288.67' y2='102.59' style='stroke-width: 0.85; stroke-dasharray: 7.97,3.41; stroke-linecap: butt;' />
 <line x1='334.56' y1='341.00' x2='334.56' y2='102.59' style='stroke-width: 0.85; stroke-dasharray: 7.97,3.41; stroke-linecap: butt;' />
 <line x1='59.18' y1='273.77' x2='564.04' y2='273.77' style='stroke-width: 0.85; stroke-dasharray: 7.97,3.41; stroke-linecap: butt;' />
-<line x1='103.70' y1='266.23' x2='107.33' y2='264.28' style='stroke-width: 1.07; stroke: #1A1A1A;' />
-<polygon points='104.96,264.20 103.70,266.23 106.08,266.30 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
-<line x1='238.83' y1='261.44' x2='234.84' y2='263.41' style='stroke-width: 1.07; stroke: #1A1A1A;' />
-<polygon points='237.51,263.42 238.83,261.44 236.46,261.28 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
-<text x='98.60' y='276.17' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='71.44px' lengthAdjust='spacingAndGlyphs'>hsa-miR-1299</text>
-<text x='251.52' y='259.64' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='81.55px' lengthAdjust='spacingAndGlyphs'>hsa-miR-582-3p</text>
+<line x1='113.27' y1='261.31' x2='109.23' y2='263.31' style='stroke-width: 1.07; stroke: #1A1A1A;' />
+<polygon points='111.95,263.30 113.27,261.31 110.89,261.16 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
+<line x1='238.84' y1='261.44' x2='234.84' y2='263.41' style='stroke-width: 1.07; stroke: #1A1A1A;' />
+<polygon points='237.51,263.42 238.84,261.44 236.46,261.28 ' style='stroke-width: 1.07; stroke: #1A1A1A; fill: #1A1A1A;' />
+<text x='125.88' y='259.51' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='71.44px' lengthAdjust='spacingAndGlyphs'>hsa-miR-1299</text>
+<text x='251.48' y='259.64' text-anchor='middle' style='font-size: 11.38px; font-family: "Arial";' textLength='81.55px' lengthAdjust='spacingAndGlyphs'>hsa-miR-582-3p</text>
 <polyline points='59.18,341.00 59.18,102.59 ' style='stroke-width: 1.71; stroke-linecap: butt;' />
 <text x='48.43' y='336.61' text-anchor='end' style='font-size: 18.00px;fill: #4D4D4D; font-family: "Arial";' textLength='10.02px' lengthAdjust='spacingAndGlyphs'>0</text>
 <text x='48.43' y='293.26' text-anchor='end' style='font-size: 18.00px;fill: #4D4D4D; font-family: "Arial";' textLength='10.02px' lengthAdjust='spacingAndGlyphs'>1</text>
@@ -695,13 +695,13 @@
 <text transform='translate(28.11,225.61) rotate(-90)' style='font-size: 12.60px; font-family: "Arial";' textLength='14.00px' lengthAdjust='spacingAndGlyphs'>10</text>
 <text transform='translate(24.84,211.61) rotate(-90)' style='font-size: 18.00px; font-family: "Symbol";' textLength='4.50px' lengthAdjust='spacingAndGlyphs'> </text>
 <text transform='translate(24.84,207.11) rotate(-90)' style='font-size: 18.00px; font-family: "Arial";' textLength='36.03px' lengthAdjust='spacingAndGlyphs'>Padj</text>
-<rect x='154.00' y='40.59' width='315.24' height='38.08' style='stroke-width: 2.33; stroke: none; fill: #FFFFFF;' />
-<circle cx='173.04' cy='59.63' r='6.11' style='stroke-width: 1.55; fill: #000000;' />
-<circle cx='230.57' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #CBD5E8; fill: #CBD5E8;' />
-<circle cx='322.33' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #FF0000; fill: #FF0000;' />
-<text x='192.08' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='19.45px' lengthAdjust='spacingAndGlyphs'>NS</text>
-<text x='249.62' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='53.67px' lengthAdjust='spacingAndGlyphs'>Log2 FC</text>
-<text x='341.37' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='115.91px' lengthAdjust='spacingAndGlyphs'>p-adj and Log2 FC</text>
+<rect x='136.88' y='40.59' width='349.47' height='38.08' style='stroke-width: 2.33; stroke: none; fill: #FFFFFF;' />
+<circle cx='155.92' cy='59.63' r='6.11' style='stroke-width: 1.55; fill: #000000;' />
+<circle cx='213.46' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #CBD5E8; fill: #CBD5E8;' />
+<circle cx='305.21' cy='59.63' r='6.11' style='stroke-width: 1.55; stroke: #FF0000; fill: #FF0000;' />
+<text x='174.96' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='19.45px' lengthAdjust='spacingAndGlyphs'>NS</text>
+<text x='232.50' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='53.67px' lengthAdjust='spacingAndGlyphs'>Log2 FC</text>
+<text x='324.25' y='64.65' style='font-size: 14.00px; font-family: "Arial";' textLength='150.14px' lengthAdjust='spacingAndGlyphs'>p-adjusted and Log2 FC</text>
 <text x='59.18' y='24.84' style='font-size: 18.00px; font-weight: bold; font-family: "Arial";' textLength='92.70px' lengthAdjust='spacingAndGlyphs'>CAV vs NR</text>
 <text x='564.04' y='417.10' text-anchor='end' style='font-size: 14.00px; font-family: "Arial";' textLength='125.64px' lengthAdjust='spacingAndGlyphs'>total = 642 variables</text>
 </g>
