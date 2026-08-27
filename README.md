@@ -64,8 +64,8 @@ Compiled HTML notebooks with full code execution, statistical outputs, and table
 * 📄 [**Part 2: Target Prediction & Enrichment**](https://htmlpreview.github.io/?https://github.com/DariaKIL/ncRNA_heart_transplant/blob/main/microRNA_transplant_enrich.nb.html)  
 *(Note: Links use HTMLPreview to render the files directly from GitHub).*
 
-**Requirements & Reproducibility**
-To run the scripts locally, you need R (>= 4.2) and the following primary libraries:    
+## Requirements & Reproducibility  
+To run the scripts locally, you need R (>= 4.2) and the following primary libraries:      
 - Core: tidyverse, ggplot2, patchwork  
 - Bioconductor (Analysis): DESeq2, clusterProfiler, org.Hs.eg.db, multiMiR    
 - Visualization: EnhancedVolcano, pheatmap, ggvenn, ggraph, igraph
