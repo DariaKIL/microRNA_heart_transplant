@@ -1,214 +1,103 @@
 ---
-title: "micro-RNA Heart Transplantation"
+title: "ncRNA Heart Transplantation"
 output:
   html_notebook: default
 ---
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-	echo = FALSE,
-	message = FALSE,
-	warning = FALSE
-)
-```
-
+## Setup & Libraries ##
 ```{r}
 library(tidyverse)
 library(DESeq2)
 library(pheatmap)
 library(RColorBrewer)
-library(clusterProfiler)
-library(biomaRt)
-library(org.Hs.eg.db)
 library(EnhancedVolcano)
-library(GenomicRanges)
-library(msigdbr)
-library(multiMiR)
-library(miRBaseConverter)
-library(enrichplot)
 library(vsn)
-library(rvest)
-library(patchwork)
-library(dbplyr)
-library(GGally) 
 library(ggvenn)
-library(Rtsne)
-library(WGCNA)
 ```
-### Импортируем данные ###
-
-**Таблица фенотипов:**
+## Data Import ##
+**Importing Clinical Data**
 ```{r}
-setwd("/Users/dariakilina/GitHub/Micro-RNA_cardiology")
-#coldata <- read_tsv("data/phenotable.tsv", show_col_types = FALSE)
-coldata <- read_tsv("data/phenotable_before5_AB.txt", show_col_types = FALSE)
-#coldata$group <- NULL  
+setwd("~/GitHub/ncRNA_heart_transplant")
+coldata <- read_tsv("data/phenotable.txt", show_col_types = FALSE)
+
 #coldata <- coldata %>%
-#  dplyr::filter(!sample %in% c(
-#    "106_S28_R1_001",
-#    "127_S29_R1_001",
-#    "182_S25_R1_001",
-#    "125_S11_R1_001"
+#dplyr::filter(!sample %in% c(
+#    "182_S25_R1_001"
 #  ))
 coldata
 ```
-
-
-
-**Таблица каунтов:**
+**Importing Raw Counts**
 ```{r}
-counts <- read.csv("data/miR.Counts.csv", header = TRUE, sep = ",")
-counts <- column_to_rownames(counts, var = "miRNA")
+counts <- read.csv("data/miRNA_raw_counts_all_samples.csv", header = TRUE, sep = ",")
+counts <- column_to_rownames(counts, var = "X")
+counts <- t(counts)
+rownames(counts) <- gsub("\\.", "-", rownames(counts))
 head(counts)
 ```
-**Таблица каунтов только для выбранных образцов:**
+**Importing Annotation Data:**
 ```{r}
-colnames(counts) <- gsub("^X", "", colnames(counts))
-
-counts_samples <- colnames(counts)
-phenotable_samples <- coldata$sample
-common_samples <- intersect(counts_samples, phenotable_samples)
-
-counts <- counts[, c(counts$miRNA, common_samples)]  
-counts <- counts[, coldata$sample] #ранжирую по колонки в counts так же как и названия строк в coldata
-head(counts)
-```
-```{r}
-mir_idx <- grep("^hsa-miR-146a-5p", rownames(counts))
-counts[mir_idx, ]
-```
-
-**Аnnotation report:**
-
-```{r}
-anno <- read.csv("data/annotation.report.csv", header = TRUE, sep = ",")
-anno <- anno[, -c(2:5, 7, 15)]
- 
-common_samples <- intersect(anno$Sample.name.s., coldata$sample)
-
-anno <- anno[anno$Sample.name.s. %in% common_samples, ]
-anno <- anno[match(coldata$sample, anno$Sample.name.s.), ] #ранжирую по колонки в counts так же как и названия строк в coldata
+anno <- read.csv("data/anno_report.csv", header = TRUE, sep = ",")
 anno
 ```
-
+**Merging & Summarization**
+Calculating the sum of reads for each RNA type across every clinical condition (NR, ACR, AMR, CAV)
 ```{r}
 merged_df <- left_join(anno, coldata, by = c("Sample.name.s." = "sample"))
 summed_anno <- merged_df %>%
+  filter(!is.na(condition)) %>%   
   group_by(condition) %>%
   summarise(across(where(is.numeric), sum), .groups = "drop") 
+
 summed_anno
-
-#%>% mutate(total_sum = rowSums(across(where(is.numeric))))
 ```
-
-
-**Диаграмма Венна: микроРНК с высокой экспрессией (>150 каунтов)**
+**Total read counts stratified by RNA type for each sample, Figure 1A**
+Generating a stacked bar plot of the absolute read counts (in millions) across various RNA biotypes for each sample, faceted by clinical group.
 ```{r}
-counts_venn <- as.data.frame(t(counts)) %>%
-  rownames_to_column(var = "sample_count") 
-tmp <- left_join(counts_venn, coldata, by = c("sample_count" = "sample"))
+merged_df$Sample.name.s. <- gsub("_.*", "", merged_df$Sample.name.s.)
+anno_long <- merged_df %>%
+  pivot_longer(
+    cols = -c(Sample.name.s., condition, antibody), 
+    names_to = "RNA_Class",
+    values_to = "Count"
+  )
 
-summed_venn <- tmp %>%
-  group_by(condition) %>%
-  summarise(across(where(is.numeric), sum)) %>%
-  pivot_longer(cols = -condition, names_to = "miRNA", values_to = "counts") %>%
-  filter(counts > 150) 
-
-venn_no_c <- summed_venn[summed_venn$condition == "NR", ]$miRNA 
-venn_cell <- summed_venn[summed_venn$condition == "ACR", ]$miRNA
-venn_hum <- summed_venn[summed_venn$condition == "AMR", ]$miRNA 
-venn_CAV <- summed_venn[summed_venn$condition == "CAV", ]$miRNA 
-
-venn_list <- list(
-  NR = venn_no_c,
-  ACR = venn_cell,
-  AMR = venn_hum,
-  CAV = venn_CAV
-)
-
-plt <- ggvenn(
-  venn_list,
-  fill_color = c("#4CAF50", "#F44336", "#2196F3", "#FF9800"),
-  fill_alpha = 0.5,
-  stroke_size = 0,
-  set_name_size = 5,
-  text_size = 4
-)
-
-
+plt <- ggplot(anno_long, aes(x = as.character(Sample.name.s.), y = Count / 1000000, fill = RNA_Class)) +
+  geom_col(width = 0.85) + 
+  
+  facet_grid(~ condition, scales = "free_x", space = "free_x") +
+  
+  labs(x = "Sample ID", y = "Read Count (Millions)") +
+  scale_fill_brewer(palette = "Set3", name = "RNA Class") +
+  scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
+  theme_minimal() +
+  theme(
+    strip.background = element_rect(fill = "grey85", color = "white", linewidth = 2),
+    strip.text = element_text(face = "bold", size = 11, color = "black"),
+    
+    panel.grid.major.x = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.spacing = unit(0.2, "lines")
+  )
+ggsave("./pictures_transpl/plot_distr.svg", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
 print(plt)
-
-ggsave("./pictures_transpl/Venn Diagram with micro-RNA expression more than 150 counts.tiff", plot = plt, width = 8, height = 6, dpi = 300,  bg = "white")
 ```
-**Уникальные микроРНК для каждой группы**
+**Additional calculations**
+Computing the total sum of reads for each sample
 ```{r}
-unique_no_c <- setdiff(venn_no_c, c(venn_cell, venn_hum, venn_CAV))
-unique_cell <- setdiff(venn_cell, c(venn_no_c, venn_hum, venn_CAV))
-unique_hum <- setdiff(venn_hum, c(venn_no_c, venn_cell, venn_CAV))
-unique_CAV <- setdiff(venn_CAV, c(venn_no_c, venn_cell, venn_hum))
+cols <- names(anno) != "Sample.name.s."
 
-list(
-  NR = unique_no_c,
-  ACR = unique_cell,
-  AMR = unique_hum,
-  CAV = unique_CAV
-)
+anno["total", cols] <- colSums(anno[, cols], na.rm = TRUE)
+anno["total", "Sample.name.s."] <- "total"
+anno
 ```
-**Весь датасет по семплам**
+**Percentage Distribution of RNA Biotypes**
+Calculating the percentage of each small RNA class relative to the total number of reads in the entire experiment.
 ```{r}
-anno_long <- anno %>%
-  pivot_longer(cols = -Sample.name.s., names_to = "RNA_Type", values_to = "Count")
-
-plt <- ggplot(anno_long, aes(x = Sample.name.s., y = Count, fill = RNA_Type)) +
-  geom_bar(stat = "identity") +
-  theme_minimal() +
-  labs(x = "Sample", y = "Read Count") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_fill_brewer(palette = "Set3")  # Красивые цвета
-
-print(plt)
-ggsave("./pictures_transpl/transpl_barplot_alldataset_no_normalised.tiff", plot = plt, width = 8, height = 6, dpi = 300,  bg = "white")
+total_vec <- anno["total", setdiff(names(anno), "Sample.name.s.")]
+total_pct <- total_vec / sum(total_vec) * 100
+total_pct
 ```
-
-```{r}
-anno_long <- anno %>%
-  rowwise() %>%
-  mutate(across(-Sample.name.s., ~ . / sum(c_across(-Sample.name.s.)))) %>% 
-  ungroup() %>%
-  pivot_longer(cols = -Sample.name.s., names_to = "RNA_Type", values_to = "Proportion")
-
-plt <- ggplot(anno_long, aes(x = Sample.name.s., y = Proportion, fill = RNA_Type)) +
-  geom_bar(stat = "identity") +
-  theme_minimal() +
-  labs(x = "Sample", y = "Proportion") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-  scale_fill_brewer(palette = "Set3")
-
-plt
-ggsave("./pictures_transpl/transpl_barplot_alldataset_normalised.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-**Весь датасет по группам**
-```{r}
-summed_anno_plt <- summed_anno %>%
-   rowwise() %>%
-   mutate(across(-condition, ~ . / sum(c_across(-condition)))) %>% 
-   ungroup() %>%
-   pivot_longer(cols = -condition, names_to = "RNA_Type", values_to = "Proportion")
-
-
-plt <- ggplot(summed_anno_plt, aes(x = condition, y = Proportion, fill = RNA_Type)) +
-  geom_bar(stat = "identity") +
-  theme_minimal() +
-  labs(x = "Sample", y = "Proportion") +
-  theme(axis.text.x = element_text(size = 16)) +
-  scale_fill_brewer(palette = "Set3")
-
-write.csv(summed_anno_plt, "anno_long_transpl_groups%.csv", row.names = FALSE)
-plt
-ggsave("./pictures_transpl/transpl_barplot_alldataset_normalised_by groups.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-
-
+**Sequencing Depth per Group**
+Aggregating the total number of reads for each clinical group (used to describe cohort characteristics in the manuscript text).
 ```{r}
 summed_anno_plt <- summed_anno %>%
   pivot_longer(cols = -condition, names_to = "RNA_Type", values_to = "Count")
@@ -218,104 +107,287 @@ reads_before <- summed_anno_plt %>%
   summarise(total_reads = sum(Count))
 reads_before
 ```
-
-
-
-**Матрица для анализа дифференциальной экспрессии:**
+## Differential Expression Analysis ##
+**Custom Functions for DESeq2 Automation**
+Creating two custom functions:
+_run_deseq_pipeline_ — sets the reference group, applies a low-count filter (minimum of 10 reads in at least 3 samples), and runs the DESeq2 model.
+_extract_and_plot_ — extracts comparison results, applies apeglm shrinkage for LFC correction, filters significant miRNAs, and generates a Volcano Plot.
 ```{r}
-coldata$condition <- relevel(factor(coldata$condition), ref = "NR")
-modelMatrix <- model.matrix(~ condition, coldata)
-modelMatrix
-qr(modelMatrix)$rank  # ранг матрицы
-ncol(modelMatrix) 
+run_deseq_pipeline <- function(counts_mat, metadata, design_formula, ref_level) {
+  metadata$condition <- relevel(factor(metadata$condition), ref = ref_level)
+  
+  dds <- DESeqDataSetFromMatrix(
+    countData = counts_mat,
+    colData = metadata,
+    design = design_formula
+  )
+  
+  keep <- rowSums(counts(dds) >= 10) >= 3
+  dds <- dds[keep, ]
+  
+  dds <- DESeq(dds, fitType = "parametric")
+  
+  return(dds)
+}
+
+extract_and_plot <- function(dds, target_coef, plot_title, save_path) {
+  res <- results(dds, name = target_coef)
+  resLFC <- lfcShrink(dds, coef = target_coef, type = "apeglm")
+  
+  res_sign <- as.data.frame(subset(res, padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 1))
+  resLFC_sign <- as.data.frame(subset(resLFC, padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 1))
+  
+  plt <- EnhancedVolcano(
+    res,
+    lab = rownames(res),
+    x = 'log2FoldChange',
+    y = 'padj',
+    subtitle = NULL,    
+    legendLabels = c('NS', 'Log2 FC', 'p-adj', 'p-adj and Log2 FC'),
+    ylab = bquote(~-Log[10]~ 'Padj'),
+    pCutoff = 0.05,
+    FCcutoff = 1.0,
+    labSize = 4.0,
+    boxedLabels = FALSE,
+    col = c('black', '#CBD5E8', '#B3E2CD', 'red'),
+    colAlpha = 1,
+    title = plot_title,
+    selectLab = rownames(res_sign),  
+    drawConnectors = TRUE,
+    xlim = c(-10, 10),  
+    ylim = c(0, 5)
+  )
+  
+  ggsave(save_path, plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+  
+  return(list(
+    res_raw = res,
+    res_shrunken = resLFC,
+    sig_raw = res_sign,
+    sig_shrunken = resLFC_sign,
+    plot = plt
+  ))
+}
+```
+### Pairwise Comparisons with the Normal Reference (NR as Reference) ###
+**Differential expression analysis for Antibody-Mediated Rejection (AMR vs NR), Figure 2A**
+```{r}
+dds_nr_ref <- run_deseq_pipeline(counts, coldata, ~ condition, "NR")
+
+# AMR vs NR
+res_AMR_vs_NR <- extract_and_plot(
+  dds = dds_nr_ref, 
+  target_coef = "condition_AMR_vs_NR", 
+  plot_title = "AMR vs NR", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_AMR_vs_NR.svg"
+)
+res_AMR_vs_NR$plot
+```
+```{r}
+res_AMR_vs_NR$sig_raw
+```
+```{r}
+res_AMR_vs_NR$sig_shrunken 
+```
+**Per-sample normalized expression of the principal candidate miRNAs across clinical groups, Figure 3**
+```{r}
+target_mirnas <- c("hsa-miR-193b-5p", "hsa-miR-125b-5p", "hsa-miR-5588-5p")
+all_counts <- data.frame()
+
+for (mirna in target_mirnas) {
+  count_data <- plotCounts(dds_nr_ref, gene=mirna, intgroup="condition", returnData=TRUE)
+  count_data$sample <- gsub("_.*", "", rownames(count_data))
+  count_data$miRNA <- mirna 
+  all_counts <- rbind(all_counts, count_data)
+}
+
+plt <- ggplot(all_counts, aes(x=condition, y=count, fill=condition)) +
+  geom_boxplot(alpha=0.5, outlier.shape = NA) + 
+  geom_jitter(width=0.2, size=2, alpha=0.7) +
+  geom_text_repel(aes(label=sample), size=4) + 
+  scale_y_log10() +
+  facet_wrap(~ miRNA, scales="free_y", ncol=3) + 
+  labs(y = "Normalized Expression Counts", x = "Clinical Group") + 
+  theme_bw() + 
+  theme(
+    strip.text = element_text(size = 13, face = "bold"), 
+    strip.background = element_rect(fill = "grey90"),    
+    legend.position = "none",
+    aspect.ratio = 0.7  
+  )
+
+print(plt)
+ggsave("./pictures_transpl/transpl_boxplots_AMR.svg", plot = plt, width = 16, height = 10, dpi = 300)
+ggsave("./pictures_transpl/transpl_boxplots_AMR.png", plot = plt, width = 16, height = 10, dpi = 300)
 ```
 
-**Создание DESeqDataSet:**
-```{r}
-coldata$condition <- relevel(factor(coldata$condition), ref = "NR")
-#coldata$HLA_AB <- factor(coldata$HLA_AB)
 
-dds <- DESeqDataSetFromMatrix(
-  countData = counts,
-  colData = coldata,
-  design = ~ condition
+**Differential expression analysis for Acute Cellular Rejection (ACR vs NR)**
+```{r}
+res_ACR_vs_NR <- extract_and_plot(
+  dds = dds_nr_ref, 
+  target_coef = "condition_ACR_vs_NR", 
+  plot_title = "ACR vs NR", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_ACR_vs_NR.svg"
+)
+res_ACR_vs_NR$sig_raw
+res_ACR_vs_NR$sig_shrunken 
+```
+**Differential expression analysis for Cardiac Allograft Vasculopathy (CAV vs NR).**
+```{r}
+res_CAV_vs_NR <- extract_and_plot(
+  dds = dds_nr_ref, 
+  target_coef = "condition_CAV_vs_NR", 
+  plot_title = "CAV vs NR", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_CAV_vs_NR.svg"
+)
+res_CAV_vs_NR$plot
+```
+```{r}
+res_CAV_vs_NR$sig_raw
+```
+```{r}
+res_CAV_vs_NR$sig_shrunken 
+```
+### Comparisons Between Rejection Types (ACR as Reference) ###
+**Changing the baseline to ACR to identify differences between rejection types (AMR vs ACR), Figure 2D**
+```{r}
+dds_acr_ref <- run_deseq_pipeline(counts, coldata, ~ condition, "ACR")
+
+res_AMR_vs_ACR <- extract_and_plot(
+  dds = dds_acr_ref, 
+  target_coef = "condition_AMR_vs_ACR", 
+  plot_title = "AMR vs ACR", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_AMR_vs_ACR.svg"
+)
+res_AMR_vs_ACR$plot
+```
+```{r}
+res_AMR_vs_ACR$sig_raw
+```
+```{r}
+res_AMR_vs_ACR$sig_shrunken
+```
+**Changing the baseline to ACR to identify differences between rejection types (CAV vs ACR)**
+```{r}
+res_CAV_vs_ACR <- extract_and_plot(
+  dds = dds_acr_ref, 
+  target_coef = "condition_CAV_vs_ACR", 
+  plot_title = "CAV vs ACR", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_CAV_vs_ACR.svg"
+)
+res_CAV_vs_ACR$sig_raw
+res_CAV_vs_ACR$sig_shrunken 
+```
+### Pairwise Comparisons with CAV (CAV as Reference) ###
+**Differential expression analysis for Antibody-Mediated Rejection (AMR vs NR), Figure 2C**
+```{r}
+dds_cav_ref <- run_deseq_pipeline(counts, coldata, ~ condition, "CAV")
+
+res_AMR_vs_CAV <- extract_and_plot(
+  dds = dds_cav_ref, 
+  target_coef = "condition_AMR_vs_CAV", 
+  plot_title = "AMR vs CAV", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_AMR_vs_CAV.svg"
+)
+res_AMR_vs_CAV$plot
+```
+```{r}
+res_AMR_vs_CAV$sig_raw
+```
+```{r}
+res_AMR_vs_CAV$sig_shrunken 
+```
+**Changing the baseline to CAV to evaluate ACR vs CAV**
+```{r}
+res_ACR_vs_CAV <- extract_and_plot(
+  dds = dds_cav_ref, 
+  target_coef = "condition_ACR_vs_CAV", 
+  plot_title = "ACR vs CAV", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_ACR_vs_CAV.svg"
+)
+res_ACR_vs_CAV$sig_raw
+res_ACR_vs_CAV$sig_shrunken 
+```
+### Covariate-Adjusted Model ###
+**Adding antibody status (antibody) to the model design (~ antibody + condition) to account for the potential confounding effect of HLA sensitization on the expression profile, Figure 2B**
+```{r}
+dds_covariates <- run_deseq_pipeline(counts, coldata, ~ antibody + condition, "NR")
+
+res_AMR_vs_NR_adj <- extract_and_plot(
+  dds = dds_covariates, 
+  target_coef = "condition_AMR_vs_NR", 
+  plot_title = "AMR vs NR (Adjusted for HLA)", 
+  save_path = "./pictures_transpl/transpl_VolcanoPlot_AMR_vs_NR_adjusted.svg"
+)
+res_AMR_vs_NR_adj$plot
+```
+```{r}
+res_AMR_vs_NR_adj$sig_raw
+```
+```{r}
+res_AMR_vs_NR_adj$sig_shrunken
+```
+## Venn Diagram ##
+**Venn diagram showing the overlap of filtered miRNAs among the clinical groups, Figure 1D**
+Applying a global noise filter to the raw counts and identifying the lists of miRNAs confidently expressed in each clinical group to build an intersection diagram
+```{r}
+keep_global <- rowSums(counts >= 10) >= 3
+filtered_counts <- counts[keep_global, ]
+
+counts_mat <- filtered_counts
+
+get_filtered_mirnas <- function(condition_name){
+    samps <- coldata %>%
+        filter(condition == condition_name) %>%
+        pull(sample)
+    valid_samps <- intersect(samps, colnames(counts_mat))
+    sub_counts <- counts_mat[, valid_samps, drop = FALSE]
+    keep_group <- rowSums(sub_counts > 0) > 0
+    rownames(sub_counts)[keep_group]
+}
+
+venn_list <- list(
+  NR  = get_filtered_mirnas("NR"),
+  ACR = get_filtered_mirnas("ACR"),
+  AMR = get_filtered_mirnas("AMR"),
+  CAV = get_filtered_mirnas("CAV")
 )
 
-dds <- DESeq(dds)
-```
-**Фильтрация датасета:**
-```{r}
-dim(dds)
-smallestGroupSize <- 3
-keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
-dds <- dds[keep,]
-dim(dds)
-```
-###  Run Differential Expression Analysis ###
-```{r}
-dds <- DESeq(dds, fitType = "parametric")
-dds
-```
-
-**График нормализации каунтов**
-```{r}
-raw_counts <- counts(dds, normalized = FALSE)
-normalized_counts <- counts(dds, normalized = TRUE)
-
-df <- data.frame(
-  Sample = rep(colnames(dds), 2),
-  Counts = c(colSums(raw_counts), colSums(normalized_counts)),
-  Type = rep(c("Raw", "Normalized"), each = ncol(dds))
+plt <- ggvenn(
+  venn_list,
+  fill_color = c("#4CAF50", "#FF9800", "#2196F3", "#ec8678"),
+  fill_alpha = 0.5,
+  stroke_size = 0,
+  set_name_size = 5,
+  text_size = 4
 )
 
-plt <- ggplot(df, aes(x = Sample, y = Counts, fill = Type)) +
-  geom_bar(stat = "identity", position = "dodge") +
-  theme_minimal() +
-  labs(title = "Counts before and after normalization", x = "Sample", y = "Total Counts") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-
-plt
-ggsave("./pictures_transpl/transpl_Counts before and after normalization.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+print(plt)
+ggsave("./pictures_transpl/venna_plot.svg", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
 ```
-**rlog трансформация**
-
-- Позволяет стабилизировать дисперсию (разброс значений), особенно для генов с низким уровнем экспрессии.  
-- Преобразует данные в логарифмическую шкалу, но с регуляризацией, чтобы избежать сильного влияния малых значений. 
-
-	•	Ось X: среднее количество прочтений (reads).  
-	•	Ось Y: стандартное отклонение (разброс значений экспрессии).  
-
-	•	График должен показывать почти горизонтальную линию, то есть SD не зависит от среднего выражения.  
-	•	Это значит, что трансформация успешно стабилизировала дисперсию, что делает данные более пригодными для дальнейшего анализа.  
+## Unsupervised Clustering & PCA ##
+**Applying a regularized logarithm (rlog) transformation to the DESeq2 object to stabilize the variance prior to clustering methods. The meanSdPlot confirms the removal of variance dependence on the mean**
 ```{r}
-rlt <- rlog(dds)  #rlog Transformation
+rlt <- rlog(dds_nr_ref)
 meanSdPlot(assay(rlt)) 
-
 ```
+## Principal Component Analysis (PCA) ##
+**Principal component analysis (PCA) of filtered miRNA expression profiles according to clinical group and the presence of contemporaneous anti-HLAs, Figure 1B**
+Generating a PCA plot to evaluate the global segregation of samples in a 2D space based on their expression profiles. Colors encode the clinical group, and shapes represent the antibody status
 ```{r}
-colData(rlt)$group <- paste(
-  gsub("_.*", "", colnames(rlt)),
-  rlt$condition,
-  rlt$HLA_AB,
-  sep = "_"
-)
-colData(rlt)
-```
-
-
-**PCA plot**
-```{r}
-pcaData <- plotPCA(rlt, intgroup=c("condition", "HLA_AB"), returnData = TRUE)
+pcaData <- plotPCA(rlt, intgroup=c("condition", "antibody"), returnData = TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
 pcaData$sample <- gsub("_.*", "", rownames(pcaData))
 
+custom_palette <- c(ACR = "#f2b870", AMR = "#8EB0CE", CAV = "#ec8678", NR = "#9cd2c6")
 
-plt <- ggplot(pcaData, aes(PC1, PC2, color = condition, shape = HLA_AB)) +
+plt <- ggplot(pcaData, aes(PC1, PC2, color = condition, shape = antibody)) +
   geom_point(size = 3) +
   geom_text_repel(
     aes(label = sample),
-    size = 3,
+    size = 4,
     box.padding = 0.4,
     point.padding = 0.3,
     segment.color = "grey50",
@@ -326,1372 +398,58 @@ plt <- ggplot(pcaData, aes(PC1, PC2, color = condition, shape = HLA_AB)) +
   ylab(paste0("PC2: ", percentVar[2], "%")) +
   coord_fixed() +
   theme_bw() +
-  scale_color_brewer(palette = "Set2")
+  scale_color_manual(values = custom_palette)
 
 plt
-ggsave("./pictures_transpl/transpl_PCA plot.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+ggsave("./pictures_transpl/transpl_PCA_plot.svg", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
 ```
-
-
-**Plot of the distance between samples heatmap**
-Расчет расстояний между образцами
-	•	Обычно используется евклидово расстояние (по умолчанию в DESeq2).
-	•	Оно вычисляется по нормализованным данным экспрессии (rlog() или vst()).
-	•	Чем меньше расстояние — тем более похожи образцы.
+## Sample Distance Heatmap ##
+**Distance-based heatmap of inter-sample correlations, annotated by clinical group and contemporaneous anti-HLA antibody status, Figure 1C**
+Calculating the Euclidean distance between all samples and generating a heatmap with hierarchical clustering to visualize patient similarities
 ```{r}
+#Calculate distances and convert to matrix
 sampleDists <- dist(t(assay(rlt)))
 sampleDistMatrix <- as.matrix(sampleDists)
-rownames(sampleDistMatrix) <- paste(rlt$group)
-colnames(sampleDistMatrix) <- paste(rlt$group)
-colors <- colorRampPalette(rev(brewer.pal(9, "Blues")) )(255)
 
-plt <- pheatmap(sampleDistMatrix,
-         clustering_distance_rows = "euclidean",
-         clustering_distance_cols = "euclidean",
-         color = colors)
+rownames(sampleDistMatrix) <- gsub("_.*", "", colnames(rlt))
+colnames(sampleDistMatrix) <- gsub("_.*", "", colnames(rlt))
 
+# Extracting the columns you mentioned using in plotPCA
+anno_df <- as.data.frame(colData(rlt)[, c("condition", "antibody")])
 
+# Capitalize the column names so the legends appear as "Condition" and "Antibody"
+colnames(anno_df) <- c("Condition", "Antibody")
+
+# Define custom colors for your annotations to match the image
+anno_colors <- list(
+  Condition = c(ACR = "#f2b870", AMR = "#8EB0CE", CAV = "#ec8678", NR = "#9cd2c6"),
+  Antibody = c(yes = "#C25983", no = "#E2E2E2")
+)
+colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255) 
+
+plt <- pheatmap(
+  sampleDistMatrix,
+  clustering_distance_rows = "euclidean", 
+  clustering_distance_cols = "euclidean",
+  color = colors,                        
+  annotation_col = anno_df,
+  annotation_row = anno_df,
+  annotation_colors = anno_colors        
+)
 plt
-ggsave("./pictures_transpl/transpl_Plot of the distance between samples heatmap.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-## Гуморальное отторжение ##
-
-**Результаты анализа диф экспресии с контрастом "AMR" VS "NR"**
-```{r}
-res <- results(dds, name = "condition_AMR_vs_NR")
-resLFC <- lfcShrink(dds, coef = "condition_AMR_vs_NR", type = "apeglm")
-summary(res, alpha = 0.1)
-summary(resLFC, alpha = 0.1) 
-```
-
-**Значимые результаты**
-
-```{r}
-#as.data.frame(res[order(res$padj), ])
-res_sign <- as.data.frame(subset(res, padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 1 ))
-res_sign
-```
-hsa-miR-100-5p - была
-
-*hsa-miR-1468-5p* - новая - одна работа про негативную регуляцию ангиогенеза, остальное cancer
-
-Negative regulation of angiogenesis by novel micro RNAs.
-Sanchez V, Golyardi F, Mayaki D, Echavarria R, Harel S, Xia J, Hussain SNA.
-Pharmacol Res. 2019 Jan;139:173-181. doi: 10.1016/j.phrs.2018.11.010. Epub 2018 Nov 8.
-PMID: 30414893
-By overexpressing miR-103b, miR-330-5p, miR-557, miR-575, miR-1287-5p, and miR-1468-5p with selective mimics, we demonstrated that the pro-survival effects of Ang-1 are eliminated, Caspase-3 activity increases, and cell migration, proliferation, and capillary …
-
-Cancer-secreted exosomal miR-1468-5p promotes tumor immune escape via the immunosuppressive reprogramming of lymphatic vessels.
-Zhou C, Wei W, Ma J, Yang Y, Liang L, Zhang Y, Wang Z, Chen X, Huang L, Wang W, Wu S.
-Mol Ther. 2022 Feb 2;30(2):976-977. doi: 10.1016/j.ymthe.2021.12.014. Epub 2022 Jan 3.
-PMID: 34982969 
-
- 
-MicroRNA-1468-5p inhibits glioma cell proliferation and induces cell cycle arrest by targeting RRM1.
-Jiang K, Zhi T, Xu W, Xu X, Wu W, Yu T, Nie E, Zhou X, Bao Z, Jin X, Zhang J, Wang Y, Liu N.
-Am J Cancer Res. 2017 Apr 1;7(4):784-800. eCollection 2017.
-PMID: 28469953 
-
-
-hsa-miR-193b-5p - была 
-
-*hsa-miR-194-5p* - новая 
-Фигурировала здесь:
-Alterations in MicroRNA gene expression profile in liver transplant patients with hepatocellular carcinoma
-https://link.springer.com/article/10.1186/s12876-020-01596-2?utm_source=chatgpt.com
-
-2016 год doi: 10.1155/2016/4682172.
-MicroRNA Expression Signature in Degenerative Aortic Stenosis
- 
-Hsa-miR-194-5p regulates TRAF6-mediated M1 macrophage apoptosis in recurrent spontaneous abortion.
-Qi X, Ding Y, Zheng J, Geng X, Zhang J, Xu Y.
-J Mol Histol. 2025 May 26;56(3):166. doi: 10.1007/s10735-025-10464-w.
-PMID: 40418413
-
-Bioinformatics based exploration of hsa-miR-194-5p regulation of CHD4 through PI3K/AKT signal pathway to enhance tumor resistance to apoptosis due to loss of nests and participate in poor prognosis of oral squamous cell carcinoma.
-Li Q, Wang K, Shen Y, Lin C, Miao J, Hu X.
-Ann Transl Med. 2023 Jan 31;11(2):107. doi: 10.21037/atm-22-6332.
-PMID: 36819582 
-
-Expression Alterations and Correlative Analysis of TPH1/hsa-miR-194-5p/NEAT1 and MAOA/hsa-miR-1276/NEAT1 Axes in Pediatric Inflammatory Bowel Disease.
-Kiziltug MT, Erdal ME, Tasdelen B, Tuncel F, Usta Y.
-Int J Mol Sci. 2025 Dec 10;26(24):11923. doi: 10.3390/ijms262411923.
-
-*hsa-miR-27a-3p/27b-3p* - новая, совпала с работой Palak Shah - но у него она даунэкспрессирована + особо подходящих работ не так много
-
-MicroRNA miR-27a as a possible regulator of anti-inflammatory macrophage phenotype in preeclamptic placenta.
-Vishnyakova P, Gantsova E, Kiseleva V, Lazarev D, Knyazev E, Poltavets A, Iskusnykh M, Muminova K, Potapova A, Khodzhaeva Z, Elchaninov A, Fatkhudinov T, Sukhikh G.
-Placenta. 2024 Jan;145:151-161. doi: 10.1016/j.placenta.2023.12.003. Epub 2023 Dec 6.
-PMID: 38141416
-
-TNF-alpha promotes CXCL-1/8 production in keratinocytes by downregulating galectin-3 through NF-kappaB and hsa-miR-27a-3p pathway to contribute psoriasis development.
-Qiu XN, Hong D, Shi ZR, Lu SY, Lai YX, Ren YL, Liu XT, Guo CP, Tan GZ, Wang LC.
-Immunopharmacol Immunotoxicol. 2023 Dec;45(6):692-700. doi: 10.1080/08923973.2023.2229510. Epub 2023 Jul 3.
-
-microRNA-27a-3p delivered by extracellular vesicles from glioblastoma cells induces M2 macrophage polarization via the EZH1/KDM3A/CTGF axis.
-Zhao G, Yu H, Ding L, Wang W, Wang H, Hu Y, Qin L, Deng G, Xie B, Li G, Qi L.
-Cell Death Discov. 2022 May 14;8(1):260. doi: 10.1038/s41420-022-01035-z.
-
-Manuscript title: unravelling the neuroprotective role of miR-27a-3p in the MAPK pathway in Parkinson's disease.
-Moradi Vastegani Z, Ghaedi-Heidari R, Oroujalian A, Peymani M, Ghaedi K.
-Metab Brain Dis. 2025 Mar 11;40(3):141. doi: 10.1007/s11011-025-01568-z.
-PMID: 40067516
-
-*hsa-miR-3160-3p* - новая - вообще всего две работы на пабмеде
-
-Radiation suppresses liver metastases via exosome secretion in pancreatic cancer cells.
-Nakaoka A, Salah M, Ruixian Z, Nakahana M, Shimizu Y, Qin Q, Zhang Q, Mukumoto N, Kobayashi K, Ikegaki Y, Akasaka H, Inubushi S, Koma YI, Ishihara T, Miyawaki D, Sasayama T, Sasaki R.
-Sci Rep. 2025 Jul 3;15(1):23712. doi: 10.1038/s41598-025-08826-1.
-PMID: 40610637 Free PMC article.
-Seventeen of these genes were differentially expressed between the exosomes isolated from non-irradiated cells (0 Gy-Cells) and IR-Exo. miR-3160-5p was the most upregulated miRNA in IR-Exo. Transfection of miR-3160-5p into PC cells decreased cell migra …
-
- 
-Immune cell-specific and common molecular signatures in rheumatoid arthritis through molecular network approaches.
-Comertpay B, Gov E.
-Biosystems. 2023 Dec;234:105063. doi: 10.1016/j.biosystems.2023.105063. Epub 2023 Oct 17.
-PMID: 37852410
-Importantly, miR-155-5p is found as a common miRNA in all tissues. Moreover, NCOA3, PRKDC and miR-3160 might be novel molecular signatures for RA. Our results establish a novel approach for identifying immune cell-specific molecular signatures of RA
-
-*hsa-miR-99a-5p* новая - в основном статьи связанные с cancer
-
-miR-99a-5p as a biomarker for lymph node metastasis prediction in oral squamous cell carcinoma patients.
-Cousseau CPV, Sorroche BP, de Jesus Teixeira R, de Carvalho AC, Melendez ME, de Castro Capuzzo R, Laus AC, da Silva LS, de Menezes NS, Carvalho AL, Arantes LMRB.
-Head Neck. 2023 Oct;45(10):2489-2497. doi: 10.1002/hed.27459. Epub 2023 Jul 31.
-PMID: 37522839
-
- 
-MicroRNA expression patterns in oral squamous cell carcinoma: hsa-mir-99b-3p and hsa-mir-100-5p as novel prognostic markers for oral cancer.
-Jakob M, Mattes LM, Küffer S, Unger K, Hess J, Bertlich M, Haubner F, Ihler F, Canis M, Weiss BG, Kitz J.
-Head Neck. 2019 Oct;41(10):3499-3515. doi: 10.1002/hed.25866. Epub 2019 Jul 29.
-PMID: 31355988
-
-hsa-miR-125b-5p hsa-miR-146a-5p hsa-miR-146b-3p hsa-miR-152-3p hsa-miR-335-5p hsa-miR-3677-3p hsa-miR-5588-5p - ушли.... 
-```{r}
-resLFC_sign <- as.data.frame(subset(resLFC, padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 1 ))
-resLFC_sign
-```
-```{r}
-plotCounts(dds, gene="hsa-miR-20b-3p", intgroup="condition")
-```
-
-```{r}
-plt <- EnhancedVolcano(
-  res,
-  lab = rownames(res),
-  x = 'log2FoldChange',
-  y = 'padj',
-  pCutoff = 0.05,
-  FCcutoff = 1,
-  labSize = 3.0,
-  boxedLabels = FALSE,
-  col = c('black', '#CBD5E8', '#B3E2CD', 'red'),
-  colAlpha = 1,
-  title = NULL,
-  selectLab = rownames(res_sign),  # 👈 все метки будут отображены
-  drawConnectors = TRUE               # стрелочки, если метки накладываются
-)
-
-plt
-ggsave("./pictures_transpl/transpl_VolcanoPlot_AMR.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-
-**MA plot**
-Фильтрация точек с низким средним экспрессированием (по baseMean).
-	•	Обычно отсекаются baseMean < 1.
-	2.	Определение значимых генов (синие точки):
-	•	Используется критерий padj < 0.1 по умолчанию, а не < 0.05! 
-```{r}
-tiff("./pictures_transpl/transpl_PlotMA_standart_padj_0.05_AMR.tiff", 
-     width = 8, height = 6, units = "in", res = 300, bg = "white")
-plotMA(res, alpha = 0.05, ylim = c(-8, 8)) 
-dev.off()
-plotMA(res, alpha = 0.05, ylim = c(-8, 8)) 
-plotMA(resLFC, alpha = 0.05, ylim = c(-8, 8)) 
-```
-**Кастомный MA plot**
-```{r}
-res_df <- res %>%
-  as.data.frame() %>%
-  mutate(color = case_when( 
-    padj < 0.05  ~ "padj < 0.05",   
-    pvalue < 0.05  ~ "pvalue < 0.05", 
-    TRUE ~ "All"
-  ))
-
-plt <- ggplot(res_df, aes(x = baseMean, y = log2FoldChange, color = color)) +
-  geom_point(alpha = 0.7, size = 1) +
-  geom_hline(yintercept = 0, linetype = "solid", color = "gray40", size = 1.5) +
-  scale_color_manual(values = c("All" = "gray70", 
-                                "pvalue < 0.05" = "blue", 
-                                "padj < 0.05" = "red")) +
-  scale_x_log10(labels = scales::scientific) + 
-  theme_minimal() +
-  labs(x = "mean of normalized counts", 
-       y = "log fold change", 
-       color = NULL)
-
-plt
-ggsave("./pictures_transpl/transpl_Сustom MAplot_AMR.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-**Visualisation for the first gene**
-**Визуализация в виде боксплотов**
-```{r}
-#gene_idx <- which.max(resLFC_AMR$log2FoldChange)
-#gene_name <- rownames(resLFC_AMR)[gene_idx]  
-
-selected_miRNA <- "hsa-miR-100-5p"
-
-gene_idx <- which(rownames(res) == selected_miRNA)
-gene_name <- rownames(res)[gene_idx] 
-  
-count_data <- plotCounts(dds, gene=gene_idx, intgroup="condition", returnData=TRUE)
-count_data$sample <- gsub("_.*", "", rownames(count_data))  
-
-plt <- ggplot(count_data, aes(x=condition, y=count, fill=condition)) +
-  geom_boxplot(alpha=0.5) +
-  geom_text(aes(label=sample), size=3, vjust=-1) + 
-  geom_jitter(width=0.2, size=2, alpha=0.7) +
-  scale_y_log10() +
-  ggtitle(paste("Expression of", gene_name)) +
-  theme_minimal()
-
-plt
-ggsave("./pictures_transpl/transpl_boxplots_AMR_hsa-miR-193b-5p.tiff", plot = plt, width = 16, height = 10, dpi = 300)
-```
-```{r}
-coldata_filtered <- coldata[coldata$condition %in% c("AMR", "NR"), ]
-coldata_filtered
-```
-
-**Plot a heatmap of diff expressed genes**
-```{r}
-sig_genes <- rownames(res_sign)  
-
-de_mat <- assay(rlt)[sig_genes, ] 
-
-de_mat_filtered <- de_mat[, coldata_filtered$sample]
-datamatrix <- t(scale(t(de_mat_filtered)))
-#datamatrix <- de_mat_filtered
-
-annotation_col <- data.frame(condition = coldata_filtered$condition)
-rownames(annotation_col) <- colnames(datamatrix)
-
-annotation_colors <- list(
-  condition = c(
-    NR = "#FFCC00",
-    AMR = "#3399FF"
-  ),
-  HLA_AB = c(
-    no = "grey70",
-    yes = "red"
-  )
-)
-
-plt <- pheatmap(datamatrix,
-         cluster_rows = TRUE, 
-         show_rownames = TRUE, 
-         cluster_cols = TRUE, 
-         annotation_col = annotation_col,
-         annotation_colors = annotation_colors,
-         display_numbers = FALSE,
-         legend = TRUE,
-         fontsize = 15)  
-annotation_col <- data.frame(
-  condition = colData(rlt)$condition,
-  HLA_AB = colData(rlt)$HLA_AB
-)
-
-
-
-ggsave("./pictures_transpl/transpl_Heatmap of diff expressed genes_AMR.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-
-### Анализ обогащения гуморальное отторжение###
-```{r}
-up <- res_sign %>% 
-  filter(log2FoldChange > 0)
-down <- res_sign %>% 
-  filter(log2FoldChange < 0)
-rownames(up)
-rownames(down)
-```
-**Конвертация в MIMATID** 
-```{r}
-converted_up <- miRNAVersionConvert(rownames(up))
-#converted_up <- miRNAVersionConvert(c("hsa-miR-100-5p", "hsa-miR-1468-5p", "hsa-miR-193b-5p", "hsa-miR-194-5p", "hsa-miR-27a-3p", "hsa-miR-99a-5p"))
-converted_up
-converted_down <- miRNAVersionConvert(rownames(down))
-converted_down
-```
-**Запрос таргетов из базы multiMiR** 
-```{r}
-mir_list_down <- converted_down$Accession 
-mir_list_up <- converted_up$Accession 
-
-mm_down <- get_multimir(
-  org = "hsa",
-  mirna = mir_list_down,
-  table = "validated"
-)
-
-mm_up <- get_multimir(
-  org = "hsa",
-  mirna = mir_list_up,
-  table = "validated"
-)
-
-df_down <- mm_down@data %>%
-  dplyr::distinct(target_symbol, mature_mirna_id)
-
-df_down
-
-df_up <- mm_up@data %>%
-  dplyr::filter(database == "mirtarbase") %>% 
-  dplyr::distinct(target_symbol, mature_mirna_id)
-
-df_up
-#
-#dplyr::filter(support_type == "Functional MTI"), experiment %in% c("Reporter assay", "Western blot", "CLIP-Seq")
-  
-```
-mirtarbase
-```{r}
-selected_up <- mm_up@data %>%
-  dplyr::filter(database == "mirtarbase") %>%
-  dplyr::distinct(mature_mirna_id, target_symbol) %>%
-  dplyr::group_by(target_symbol) %>%
-  dplyr::filter(n_distinct(mature_mirna_id) >= 2) %>%
-  dplyr::ungroup()
-
-selected_up
-```
-```{r}
-df_shared_up <- selected_up %>%
-  dplyr::group_by(target_symbol) %>%
-  dplyr::filter(n_distinct(mature_mirna_id) >= 2) %>%
-  dplyr::summarise(
-    n_interactions = n_distinct(mature_mirna_id),
-    miRNAs = paste(unique(mature_mirna_id), collapse = "; "),
-    .groups = "drop"
-  )
-df_shared_up
-```
-
-
-```{r}
-gene_freq_up <- selected_up %>%
-   dplyr::count(mature_mirna_id, name = "n_target")
-gene_freq_up
-```
-
-```{r}
-genes_for_kegg <- unique(df_down$target_symbol)
-genes_for_kegg <- genes_for_kegg[genes_for_kegg != ""]
-
-#genes_for_kegg <- c("FSD2", "NCLN")
-entrez_ids <- bitr(
-  genes_for_kegg,
-  fromType = "SYMBOL",
-  toType   = "ENTREZID",
-  OrgDb    = org.Hs.eg.db
-)
-
-kegg_enrich <- enrichKEGG(
-  gene         = entrez_ids$ENTREZID,
-  organism     = "hsa",
-  pAdjustMethod = "BH",
-  qvalueCutoff = 1,
-  minGSSize = 3
-)
-
-plt <- dotplot(kegg_enrich, showCategory = 20) +
-  ggtitle("KEGG for DOWNregulated miRNA targets") +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    axis.text.y = element_text(size = 11)
-  )
-plt
-```
-
-**Анализ обогащения из базы KEGG**
-```{r}
-
-genes_kegg_up <- unique(selected_up$target_symbol)
-genes_kegg_up <- genes_kegg_up[genes_kegg_up != ""]
-
-#genes_for_kegg <- c("FSD2", "NCLN")
-entrez_ids_up <- bitr(
-  genes_kegg_up,
-  fromType = "SYMBOL",
-  toType   = "ENTREZID",
-  OrgDb    = org.Hs.eg.db
-)
-
-kegg_enrich <- enrichKEGG(
-  gene         = entrez_ids_up$ENTREZID,
-  organism     = "hsa",
-  pAdjustMethod = "BH",
-  qvalueCutoff = 1,
-  minGSSize = 3
-)
-
-plt <- dotplot(kegg_enrich, showCategory = 20) +
-  ggtitle("KEGG for UPregulated miRNA targets") +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    axis.text.y = element_text(size = 11)
-  )
-plt
-```
-```{r}
-library(ReactomePA)
-
-reactome_enrich <- enrichPathway(
-  gene         = entrez_ids$ENTREZID,
-  organism     = "human",
-  pAdjustMethod = "BH",
-  qvalueCutoff = 0.25,
-  readable     = TRUE
-)
-
-dotplot(reactome_enrich, showCategory = 20) +
-  ggtitle("Reactome enrichment for UP miRNA targets")
-```
-
-
-```{r}
-kegg_list <- selected_up %>%
-  dplyr::group_by(mature_mirna_id) %>%
-  dplyr::summarise(genes = list(unique(target_symbol)), .groups = "drop") %>%
-  dplyr::rowwise() %>%
-  dplyr::mutate(
-    entrez = list(
-      bitr(
-        genes,
-        fromType = "SYMBOL",
-        toType   = "ENTREZID",
-        OrgDb    = org.Hs.eg.db
-      )$ENTREZID
-    ),
-    kegg = list(
-      enrichKEGG(
-        gene         = entrez,
-        organism     = "hsa",
-        pAdjustMethod = "BH",
-        qvalueCutoff = 0.25
-      )
-    )
-  )
-
-kegg_list
-```
-```{r}
-gene_sets <- selected_up %>%
-  dplyr::group_by(mature_mirna_id) %>%
-  dplyr::summarise(
-    genes = list(unique(target_symbol)),
-    .groups = "drop"
-  )
-
-gene_sets
-```
-```{r}
-library(org.Hs.eg.db)
-library(clusterProfiler)
-
-run_kegg_safe <- function(genes_symbol) {
-  entrez <- bitr(
-    genes_symbol,
-    fromType = "SYMBOL",
-    toType   = "ENTREZID",
-    OrgDb    = org.Hs.eg.db
-  )
-
-  if (is.null(entrez) || nrow(entrez) < 1) return(NULL)
-
-  ek <- tryCatch(
-    enrichKEGG(
-      gene         = entrez$ENTREZID,
-      organism     = "hsa",
-      pAdjustMethod = "BH",
-      qvalueCutoff = 0.25
-    ),
-    error = function(e) NULL
-  )
-
-  if (is.null(ek) || nrow(ek@result) == 0) return(NULL)
-
-  as.data.frame(ek)
-}
-```
-
-
-```{r}
-library(purrr)
-
-kegg_df_AMR <- gene_sets %>%
-  dplyr::mutate(
-    kegg = purrr::map(genes, run_kegg_safe)
-  ) %>%
-  dplyr::select(mature_mirna_id, kegg) %>%
-  tidyr::unnest(kegg)
-```
-
-
-
-```{r}
-ggplot(kegg_df_AMR,
-       aes(x = mature_mirna_id, y = Description)) +
-  geom_point(aes(size = Count, color = p.adjust)) +
-  scale_color_gradient(low = "red", high = "blue") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-```{r}
-filtered_df <- kegg_df_AMR %>%
-  filter(str_detect(Description, "pathway"))
-ggplot(filtered_df,
-       aes(x = mature_mirna_id, y = Description)) +
-  geom_point(aes(size = Count, color = p.adjust)) +
-  scale_color_gradient(low = "red", high = "blue") +
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-## Клеточное отторжение ##
-```{r}
-res_ACR <- results(dds, contrast=c("condition", "ACR", "NR"))
-resLFC_ACR <- lfcShrink(dds, coef = "condition_ACR_vs_NR", type = "apeglm")
-summary(res_ACR)
-summary(resLFC_ACR) 
-```
-**MA plot**
-
-```{r}
-tiff("./pictures_transpl/transpl_PlotMA_standart_padj_0.05_ACR.tiff", 
-     width = 8, height = 6, units = "in", res = 300, bg = "white")
-plotMA(res_ACR, alpha = 0.05, ylim = c(-8, 8)) 
-dev.off()
-plotMA(res_ACR, alpha = 0.05, ylim = c(-8, 8)) 
-plotMA(resLFC_ACR, alpha = 0.05) 
-```
-
-**Кастомный MA plot**
-```{r}
-res_df <- res_ACR %>%
-  as.data.frame() %>%
-  mutate(color = case_when( 
-    padj < 0.05  ~ "padj < 0.05",   
-    pvalue < 0.05  ~ "pvalue < 0.05", 
-    TRUE ~ "All"
-  ))
-
-plt <- ggplot(res_df, aes(x = baseMean, y = log2FoldChange, color = color)) +
-  geom_point(alpha = 0.7, size = 1) +
-  geom_hline(yintercept = 0, linetype = "solid", color = "gray40", size = 1.5) +
-  scale_color_manual(values = c("All" = "gray70", 
-                                "pvalue < 0.05" = "blue", 
-                                "padj < 0.05" = "red")) +
-  scale_x_log10(labels = scales::scientific) + 
-  theme_minimal() +
-  labs(x = "mean of normalized counts", 
-       y = "log fold change", 
-       color = NULL)
-
-plt
-ggsave("./pictures_transpl/transpl_Сustom MAplot_ACR.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-```{r}
-sign_ACR <- subset(res_ACR,  padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 1)
-sign_ACR
-```
-```{r}
-sign_LFC_ACR <- subset(resLFC_ACR,  padj < 0.05 & !is.na(padj))
-sign_LFC_ACR
-```
-
-
-```{r}
-as.data.frame(resLFC_ACR[order(resLFC_ACR$pvalue), ])
-```
-*hsa-miR-4454*
-Identification of hsa-miR-619-5p and hsa-miR-4454 in plasma-derived exosomes as a potential biomarker for lung adenocarcinoma.
-Feng L, Feng Z, Hu J, Gao J, Li A, He X, Liu L, Shen Z.
-Front Genet. 2023 May 11;14:1138230. doi: 10.3389/fgene.2023.1138230. eCollection 2023.
-PMID: 37252659 
-
-A Novel miRNA Screen Identifies miRNA-4454 as a Candidate Biomarker for Ventricular Fibrosis in Patients with Hypertrophic Cardiomyopathy.
-Thottakara T, Lund N, Krämer E, Kirchhof P, Carrier L, Patten M.
-Biomolecules. 2021 Nov 18;11(11):1718. doi: 10.3390/biom11111718.
-PMID: 34827715 
-
-```{r}
-plt <- EnhancedVolcano(
-  res_ACR,
-  lab = rownames(res_ACR),
-  x = 'log2FoldChange',
-  y = 'padj',
-  pCutoff = 0.1,
-  FCcutoff = 1,
-  labSize = 3.0,
-  boxedLabels = FALSE,
-  col = c('black', '#CBD5E8', '#B3E2CD', 'red'),
-  colAlpha = 1,
-  title = NULL,
-  selectLab = rownames(sign_ACR),  # 👈 все метки будут отображены
-  drawConnectors = TRUE               # стрелочки, если метки накладываются
-)
-
-plt
-ggsave("./pictures_transpl/transpl_VolcanoPlot_AMR.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-
-
-## БКAПC ##
-```{r}
-res_CAV <- results(dds, contrast=c("condition", "CAV", "NR"))
-resLFC_CAV <- lfcShrink(dds, coef = "condition_CAV_vs_NR", type = "apeglm")
-summary(res_CAV)
-summary(resLFC_CAV) 
-```
-
-**MA plot**
-```{r}
-tiff("./pictures_transpl/transpl_PlotMA_standart_padj_0.05_CAV.tiff", 
-     width = 8, height = 6, units = "in", res = 300, bg = "white")
-dev.off()
-plotMA(res_CAV, alpha = 0.1) 
-plotMA(resLFC_CAV, alpha = 0.1) 
-```
-**Кастомный MA plot**
-```{r}
-res_df <- resLFC_CAV %>%
-  as.data.frame() %>%
-  mutate(color = case_when( 
-    padj < 0.1  ~ "padj < 0.1",   
-    pvalue < 0.05  ~ "pvalue < 0.05", 
-    TRUE ~ "All"
-  ))
-
-plt <- ggplot(res_df, aes(x = baseMean, y = log2FoldChange, color = color)) +
-  geom_point(alpha = 0.7, size = 1) +
-  geom_hline(yintercept = 0, linetype = "solid", color = "gray40", size = 1.5) +
-  scale_color_manual(values = c("All" = "gray70", 
-                                "pvalue < 0.05" = "blue", 
-                                "padj < 0.1" = "red")) +
-  scale_x_log10(labels = scales::scientific) + 
-  theme_minimal() +
-  labs(x = "mean of normalized counts", 
-       y = "log fold change", 
-       color = NULL)
-
-plt
-ggsave("./pictures_transpl/transpl_Сustom_MAplot_CAV.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-
-```{r}
-resLFC_CAV_sign <- as.data.frame(subset(resLFC_CAV, padj < 0.05 & !is.na(padj)))
-resLFC_CAV_sign
-#write.csv(resLFC_sign, "resLFC_sign+187.csv", row.names = TRUE)
-```
-```{r}
-res_CAV_sign <- as.data.frame(subset(res_CAV, padj < 0.1 & !is.na(padj) & abs(log2FoldChange) > 1))
-res_CAV_sign
-#write.csv(resLFC_sign, "resLFC_sign+187.csv", row.names = TRUE)
-```
-
-
-**Volcano plot**
-
-```{r}
-plt <- EnhancedVolcano(res_CAV,
-                lab = rownames(res_CAV),
-                x = "log2FoldChange",
-                y = "padj",
-                pCutoff = 0.1,
-                FCcutoff = 1,
-                labSize = 3.0,
-                boxedLabels = FALSE,
-                col = c('black', '#CBD5E8', '#B3E2CD', 'red'),
-                colAlpha = 1,
-                title = NULL,        
-                subtitle = NULL) 
 
-plt
+ggsave("./pictures_transpl/transpl_distance_heatmap.svg", plot = plt, width = 9, height = 6, dpi = 300, bg = "white")
 ```
-
-```{r}
-plt <- EnhancedVolcano(resLFC_CAV,
-                lab = rownames(resLFC_CAV),
-                x = "log2FoldChange",
-                y = "padj",
-                pCutoff = 0.1,
-                FCcutoff = 1,
-                labSize = 3.0,
-                boxedLabels = FALSE,
-                col = c('black', '#CBD5E8', '#B3E2CD', 'red'),
-                colAlpha = 1,
-                title = NULL,        
-                subtitle = NULL) 
-
-plt
-ggsave("./pictures_transpl/transpl_VolcanoPlot_CAV.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-```
-
-
-
-```{r}
-#gene_idx <- which.max(resLFC_CAV$log2FoldChange)
-#gene_name <- rownames(resLFC_CAV)[gene_idx]  
-
-selected_miRNA <- "hsa-miR-1299"
- 
-gene_idx <- which(rownames(resLFC_CAV) == selected_miRNA)
-gene_name <- rownames(resLFC_CAV)[gene_idx] 
-  
-count_data <- plotCounts(dds, gene=gene_idx, intgroup="condition", returnData=TRUE)
-count_data$sample <- gsub("_.*", "", rownames(count_data))  
-
-plt <- ggplot(count_data, aes(x=condition, y=count, fill=condition)) +
-  geom_boxplot(alpha=0.5) +
-  geom_text(aes(label=sample), size=3, vjust=-1) + 
-  geom_jitter(width=0.2, size=2, alpha=0.7) +
-  scale_y_log10() +
-  ggtitle(paste("Expression of", gene_name)) +
-  theme_minimal()
-
-plt
-ggsave("./pictures_transpl/transpl_boxplots_CAV_hsa-miR-582-3p.tiff", plot = plt, width = 16, height = 10, dpi = 300)
-```
-```{r}
-down_CAV <- res_CAV_sign %>% 
-  filter(log2FoldChange < 0)
-rownames(down_CAV)
-```
-
-```{r}
-converted_down_CAV <- miRNAVersionConvert("hsa-miR-1299")
-converted_down_CAV
-```
-```{r}
-mir_list <- converted_down_CAV$Accession  # твой список miRNA
-
-mm <- get_multimir(
-  org = "hsa",
-  mirna = mir_list,
-  table = "validated"
-)
-
-df_down_CAV <- mm@data %>%
-  dplyr::distinct(target_symbol, mature_mirna_id)
-
-df_down_CAV
-```
-```{r}
-genes_for_kegg <- unique(df_down_CAV$target_symbol)
-entrez_ids <- bitr(
-  genes_for_kegg,
-  fromType = "SYMBOL",
-  toType   = "ENTREZID",
-  OrgDb    = org.Hs.eg.db
-)
-
-kegg_enrich <- enrichKEGG(
-  gene         = entrez_ids$ENTREZID,
-  organism     = "hsa",
-  pAdjustMethod = "BH",
-  qvalueCutoff = 0.25
-)
-
-plt <- dotplot(kegg_enrich, showCategory = 20) +
-  ggtitle("KEGG for DOWNregulated miRNA targets") +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    axis.text.y = element_text(size = 11)
-  )
-plt
-```
-
-
-**Какие модули коэкспрессии связаны с цитокинами?**
-**WGCNA**
-```{r}
-library(WGCNA)
-coldata <- read_tsv("data/phenotable_before5.txt", show_col_types = FALSE)
-coldata$group <- NULL  
-coldata <- coldata %>%
-  dplyr::filter(!sample %in% c(
-    "167_S23_R1_001",
-    "179_S26_R1_001"
-  ))
-coldata
-```
-```{r}
-counts <- read.csv("data/miR.Counts.csv", header = TRUE, sep = ",")
-counts <- column_to_rownames(counts, var = "miRNA")
-head(counts)
-```
-
-```{r}
-colnames(counts) <- gsub("^X", "", colnames(counts))
-
-counts_samples <- colnames(counts)
-phenotable_samples <- coldata$sample
-common_samples <- intersect(counts_samples, phenotable_samples)
-
-counts <- counts[, c(counts$miRNA, common_samples)]  
-counts <- counts[, coldata$sample] #ранжирую по колонки в counts так же как и названия строк в coldata
-head(counts)
-```
-```{r}
-coldata$condition <- relevel(factor(coldata$condition), ref = "NR")
-modelMatrix <- model.matrix(~condition, coldata)
-modelMatrix
-qr(modelMatrix)$rank  # ранг матрицы
-ncol(modelMatrix) 
-```
-```{r}
-dds <- DESeqDataSetFromMatrix(countData = counts, colData = coldata, design = ~ condition)
-dds$condition <- relevel(dds$condition, ref = "NR")
-dds
-```
-```{r}
-dim(dds)
-smallestGroupSize <- 3 
-keep <- rowSums(counts(dds) >= 10) >= smallestGroupSize
-dds <- dds[keep,]
-dim(dds)
-```
-```{r}
-dds <- DESeq(dds)
-dds
-```
-```{r}
-rlt <- rlog(dds)  #rlog Transformation
-meanSdPlot(assay(rlt)) 
-```
-
-```{r}
-res_AMR <- results(dds, contrast=c("condition", "AMR", "NR"))
-resLFC_AMR <- lfcShrink(dds, coef = "condition_AMR_vs_NR", type = "apeglm")
-summary(res_AMR)
-summary(resLFC_AMR) 
-```
-
-```{r}
-colData(rlt)$sample_condition <- paste0(
-  colData(rlt)$sample, "_", colData(rlt)$condition
-)
-datExpr <- t(assay(rlt))
-rownames(datExpr) <- colData(rlt)$sample_condition
-
-sampletree <- hclust(dist(datExpr), method = "average")
-
-plot(sampletree, cex = 0.6, main = "Sample clustering")
-```
-
-
-```{r}
-powers <- c(c(1:10), seq(from = 15, to=50, by=5))
-sft <- pickSoftThreshold(datExpr, powerVector = powers)
-```
-```{r}
-
-par(mfrow = c(1,2));
-cex1 = 0.8;
-# Scale-free topology fit index as a function of the soft-thresholding power
-plot(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
-     xlab="Soft Threshold (power)",ylab="Scale Free Topology Model Fit,signed R^2",type="n",
-     main = paste("Scale independence"));
-text(sft$fitIndices[,1], -sign(sft$fitIndices[,3])*sft$fitIndices[,2],
-     labels=powers,cex=cex1,col="red");
-# this line corresponds to using an R^2 cut-off of h
-abline(h=0.90,col="red")
-```
-Ось Y — Scale Free Topology Fit (signed R²)
-
-Это насколько хорошо сеть при данном power похожа на scale-free
-	•	0.1 — плохо
-	•	0.5 — так себе
-	•	≥ 0.8 — хорошо
-	•	≥ 0.9 — отлично
-Каждая цифра — это значение power
-	•	«7» — результат при power = 7
-	•	«20» — при power = 20
-	
-	
-У меня: При power = 30–50 почти все связи → 0, сеть становится слишком разреженной, модули будут: нестабильны, driven одним пациентом, плохо воспроизводимы
-Выбираем минимальный power, при котором R² ≥ 0.8–0.9 и средняя связность ещё не убита, Power = 6 или 7 — ИДЕАЛЬНО
-
-```{r}
-# Mean connectivity as a function of the soft-thresholding power
-plot(sft$fitIndices[,1], sft$fitIndices[,5],
-     xlab="Soft Threshold (power)",ylab="Mean Connectivity", type="n",
-     main = paste("Mean connectivity"))
-text(sft$fitIndices[,1], sft$fitIndices[,5], labels=powers, cex=cex1,col="red")
-
-```
-Средняя связность (mean connectivity) сети в зависимости от power - насколько “плотная” сеть, сколько связей в среднем у одного узла (miRNA)
-Power = 1, Mean connectivity ≈ 160 -	почти каждая miRNA связана со всеми, сеть слишком плотная, скорее всего просто шум
-Power = 7–10, Connectivity ~3–8, сеть становится более строгой, хорошо для маленьких cohort
-
-
-```{r}
-net <- blockwiseModules(
-  datExpr,
-  power = 6,
-  TOMType = "unsigned",
-  minModuleSize = 15,
-  mergeCutHeight = 0.25,
-  numericLabels = TRUE
-)
-```
-clin <- clin %>%
-  dplyr::filter(!sample %in% c(
-    "166_S4_R1_001",
-    "109_S9_R1_001",
-    "187_S10_R1_001",
-    "125_S11_R1_001",
-    "192_S22_R1_001",
-    "179_S26_R1_001",
-    "112_S27_R1_001",
-    "127_S29_R1_001",
-    "138_S30_R1_001"
-  ))
-clin <- column_to_rownames(clin, var = "sample")
-```{r}
-library(readr)
-clin <- read.csv("data/index.csv", header = TRUE,
-                 row.names = 1, sep = ",")
-
-clin
-```
-
-```{r}
-traitData <- data.frame(clin)
-rownames(traitData) <- rownames(datExpr)
-str(traitData)
-```
-Тромбоцитарные и ростовые факторы
-sCD40L — soluble CD40 ligand Растворимая форма CD40L, маркер активации тромбоцитов и иммунного воспаления.
-EGF — Epidermal Growth Factor Фактор роста эпителия, стимулирует пролиферацию и регенерацию клеток.
-FGF-2 — Fibroblast Growth Factor 2 - Фактор роста фибробластов, участвует в ангиогенезе и заживлении тканей.
-FLT-3L — Fms-like tyrosine kinase 3 ligand - Фактор роста гемопоэтических предшественников и дендритных клеток.
-PDGF-AA / PDGF-AB-BB — Platelet-Derived Growth Factors Факторы роста тромбоцитарного происхождения, стимулируют пролиферацию мезенхимальных клеток.
-VEGF-A — Vascular Endothelial Growth Factor A Ключевой регулятор ангиогенеза и сосудистой проницаемости.
-TGFa — Transforming Growth Factor alpha Фактор роста, активирующий эпителиальную пролиферацию через EGFR.
-Колониестимулирующие факторы
-G-CSF — Granulocyte Colony-Stimulating Factor Стимулирует продукцию и созревание нейтрофилов.
-GM-CSF — Granulocyte-Macrophage CSF Стимулирует дифференцировку гранулоцитов и макрофагов.
-M-CSF — Macrophage Colony-Stimulating Factor Регулирует развитие и выживание макрофагов.
-Хемокины
-Eotaxin (CCL11) Хемокин, привлекающий эозинофилы; связан с аллергическим воспалением.
-Fractalkine (CX3CL1) Хемокин и молекула адгезии, участвует в нейро- и сосудистом воспалении.
-GROα (CXCL1) Привлекает нейтрофилы, участвует в остром воспалении.
-IP-10 (CXCL10) IFN-индуцируемый хемокин, привлекает Th1-клетки.
-MCP-1 (CCL2) / MCP-3 (CCL7) Привлекают моноциты и Т-клетки в очаг воспаления.
-MDC (CCL22) Хемокин, связанный с Th2-ответом и регуляторными Т-клетками.
-MIG (CXCL9) IFNγ-индуцируемый хемокин, усиливает Th1-ответ.
-MIP-1α (CCL3) / MIP-1β (CCL4) Привлекают моноциты, NK- и Т-клетки.
-IL-8 (CXCL8) Хемокин, активирующий нейтрофилы.
-Интерфероны
-IFNα2 — Interferon alpha 2 - Интерферон I типа, ключевой медиатор противовирусного ответа.
-IFNγ — Interferon gamma - Интерферон II типа, активирует макрофаги и Th1-иммунитет.
-Интерлейкины
-IL-1α / IL-1β Провоспалительные цитокины врождённого иммунитета.
-IL-1RA — IL-1 receptor antagonist - Эндогенный ингибитор сигналинга IL-1.
-IL-2 - Ключевой фактор пролиферации Т-клеток.
-IL-3 Стимулирует рост гемопоэтических клеток.
-IL-4 / IL-5 / IL-13  Цитокины Th2-ответа
-IL-6 Плейотропный цитокин острого воспаления.
-IL-7 Критичен для выживания Т-клеток.
-IL-9 Связан с Th9-ответом и аллергическим воспалением.
-IL-10 Ключевой противовоспалительный цитокин.
-IL-12p40 / IL-12p70  Компоненты IL-12, стимулируют Th1-дифференцировку.
-IL-15 Поддерживает NK- и CD8⁺ T-клетки.
-IL-17A / IL-17F / IL-17E (IL-25) Цитокины Th17-ответа, связаны с аутоиммунитетом и воспалением.
-IL-18 Усиливает продукцию IFNγ.
-IL-22 Регулирует барьерные ткани и эпителиальный иммунитет.
-IL-27 Иммунорегуляторный цитокин, может подавлять Th17.
-
-Факторы некроза опухоли
-TNFα — Tumor Necrosis Factor alpha Центральный провоспалительный цитокин.
-TNFβ — Lymphotoxin alpha Регулятор лимфоидной организации и воспаления.
-```{r}
-colnames(clin)
-```
- [1] "EGF"      "IFNa2"    "IL.1a"    "IL.1RA"   "Il.6"     "Il.8"     "Il.10"    "IL.12p40" "Il.15"    "Il.17F"   "IP.10"    "MCP.3"    "MIG"     
-[14] "MIP.1a"   "TGFa" 
-```{r}
-traitData <- subset(clin, select = -condition)
-
-
-rownames(traitData) <- rownames(datExpr)
-traitData
-```
-
-```{r}
-moduleColors <- labels2colors(net$colors)
-
-MEs0 <- moduleEigengenes(datExpr, moduleColors)$eigengenes
-MEs <- orderMEs(MEs0)
-dim(MEs)
-```
-
-
-```{r}
-moduleTraitCor <- cor(
-  MEs,
-  traitData,
-  use = "pairwise.complete.obs"
-)
-
-moduleTraitPvalue <- corPvalueStudent(
-  moduleTraitCor,
-  nSamples = nrow(datExpr)
-)
-```
-
-```{r}
-textMatrix <- paste0(
-  signif(moduleTraitCor, 2),
-  "\n(",
-  signif(moduleTraitPvalue, 1),
-  ")"
-)
-
-dim(textMatrix) <- dim(moduleTraitCor)
-
-labeledHeatmap(
-  Matrix = moduleTraitCor,
-  xLabels = colnames(traitData),
-  yLabels = colnames(MEs),
-  ySymbols = colnames(MEs),
-  colorLabels = TRUE,
-  colors = blueWhiteRed(50),
-  textMatrix = textMatrix,
-  setStdMargins = FALSE,
-  cex.text = 0.8,
-  zlim = c(-1,1),
-  main = "Module–trait relationships"
-)
-```
- turquoise
- 
- IL6, IL1a, IL1RA
-	•	IL-1α → ранний DAMP-ответ (ишемия, повреждение эндотелия)
-	•	IL-6 → системный медиатор AMR, ассоциирован с:	DSA,	комплементом, эндотелиальной активацией
-	•	IL-1RA → регулятор, маркер перегрузки IL-1 сигнала
-	
-Хемокины: эндотелий + рекрутинг
-IL8, MCP3, MIG (CXCL9), IP-10 (CXCL10)
-	•	IL-8 → нейтрофилы, микрососудистое повреждение
-	•	MCP-3 → моноциты
-	•	MIG / IP-10 → IFN-γ–зависимый рекрутинг T-клеток
-Характерно для C4d-positive AMR
-
-Интерфероны IFNa2, IL12p40
-	•	IFN-α → type I IFN signature
-	•	IL-12p40 → дендритные клетки, Th1-поляризация
-	
-Регуляция и “иммунное выгорание”
-IL10, IL15, IL17F
-	•	IL-10 → контррегуляция, признак перегруза
-	•	IL-15 → выживание NK и memory T
-	•	IL-17F → участие Th17 (часто в хроническом AMR)
-Переход к устойчивому воспалению
-
-Ростовые факторы
-EGF:	эндотелий, репарация,	ремоделирование
-```{r}
-plotDendroAndColors(net$dendrograms[[1]], moduleColors[net$blockGenes[[1]]],
-                    "Module colors",
-                    dendroLabels = FALSE, hang = 0.03,
-                    addGuide = TRUE, guideHang = 0.05)
-```
-Каждая ветка внизу = одна miRNA
-	•	Сгруппированы по сходству профилей экспрессии по всем пациентам
-	•	Сходство считается через корреляцию, soft-threshold, Topological Overlap Measure
-
-	•	«деревья» = иерархическая кластеризация miRNA, пациенты здесь не изображены
-	
-Height = мера несходства между кластерами miRNA
-	•	Высота ~1 → почти не связаны.	Ниже → сильнее коррелируют
-	
-Модуль = группа miRNA, которые: ведут себя координированно и вероятно участвуют в одной биологической программе
-
-серый = неинформативные / одиночки
-коричневый / бирюзовый = осмысленные модули
-
-```{r}
-MEs <- net$MEs
-geneTree <- net$dendrograms[[1]]
-
-MEs0 <- moduleEigengenes(datExpr, moduleColors)$eigengenes
-MEs <- orderMEs(MEs0)
-
-
-# Plot module behavior across the dataset
-MEs %>%
-  as.data.frame() %>% 
-  rownames_to_column("sample") %>% 
-  ggplot(aes(sample, MEyellow))+
-  geom_point()+
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
-```
-
-
-```{r}
-turquoise_miRNAs <- colnames(datExpr)[moduleColors == "turquoise"]
-length(turquoise_miRNAs)
-```
-```{r}
-turquoiseRNA <- intersect(
-  turquoise_miRNAs,
-  rownames(resLFC_AMR)[resLFC_AMR$padj < 0.05]
-)
-turquoiseRNA
-```
-```{r}
-moduleTraitCor["MEturquoise", ]
-moduleTraitPvalue["MEturquoise", ]
-selected <- names(moduleTraitCor["MEturquoise", ])[abs(moduleTraitCor["MEturquoise", ]) > 0.7 & moduleTraitPvalue["MEturquoise", ] < 0.05]
-selected 
-```
-```{r}
-turquoise_miRNAs
-```
-```{r}
-MEs$MEturquoise
-```
-
-
-```{r}
-df <- data.frame(
-  sample = rownames(MEs),
-  MEturquoise = MEs$MEturquoise,
-  condition = coldata$condition
-)
-
-ggplot(df, aes(condition, MEturquoise)) +
-  geom_boxplot() +
-  geom_jitter(width = 0.1) +
-  theme_bw()
-```
-
-```{r}
-brownRNA <- c("hsa-miR-192-5p", "hsa-miR-193a-5p", "hsa-miR-193b-3p", "hsa-miR-194-5p", "hsa-miR-3065-5p", "hsa-miR-378a-5p", "hsa-miR-548ah-5p", "hsa-miR-98-3p")
-converted_brownRNA <- miRNAVersionConvert(brownRNA)
-converted_brownRNA
-```
-**Запрос таргетов из базы multiMi**
+## Likelihood Ratio Test ##
+**Multi-Group Analysis (LRT). Performing a Likelihood Ratio Test comparing the full model (~ condition) against an intercept-only reduced model (~ 1) to identify miRNAs whose expression significantly changes in at least one group compared to all others.**
 ```{r}
-targets_brownRNA <- unique(get_multimir(org = "hsa", mirna = converted_brownRNA$Accession, table = "validated")@data$target_symbol)
-```
-**Анализ обогащения из базы биологических процессов**
-```{r}
-GO_enrich_targets_brownRNA <- enrichGO(
-  gene          = targets_brownRNA,  
-  OrgDb         = org.Hs.eg.db,
-  keyType       = "SYMBOL",
-  ont           = "BP", 
-  pAdjustMethod = "BH",
-  qvalueCutoff  = 0.05
-)
-
-p1 <- dotplot(GO_enrich_targets_brownRNA, showCategory = 20) + 
-  ggtitle("GO Enrichment for targets_brownRNA") + 
-  theme(
-    plot.title = element_text(size = 20, face = "bold"),
-    axis.text.y = element_text(size = 18)
-  ) +
-  scale_y_discrete(labels = function(x) str_wrap(x, width = 40))
-
-p1
-
-ggsave("./pictures_transpl/transpl_GO_enrichment_dotplot_up_CAV_bp.tiff", plot = p1, width = 16, height = 10, dpi = 300)
-```
-**Визуализация путей PID**
-```{r}
-msig_go_bp <- msigdbr(species = "Homo sapiens", category = "C2", subcategory = "CP:PID")
-
-
-GO_targets_brownRNA <- enricher(gene = targets_brownRNA, TERM2GENE = msig_go_bp[, c("gs_name", "gene_symbol")])
-
-plt <- dotplot(GO_targets_brownRNA, showCategory = 20) +
-  ggtitle("GO Enrichment for targets_brownRNA") +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    axis.text.y = element_text(size = 12)
-  )
-plt
-ggsave("./pictures_transpl/transpl_GO_enrichment_emapplot_UP_CAV_KEGG.tiff", plot = plt, width = 16, height = 10, dpi = 300)
-```
-PID ERBB1/MET/FAK/MTOR/MYC/E2F
-Пролиферация и выживаемость клеток, эндотелиальная активация косвенно может влиять на воспаление
-PID SMAD2/3 NUCLEAR, TGFBR
-TGF-β сигналы → фиброз, подавление иммунитета, регуляция Th17/Th1
-PID P53, RB1
-Контроль клеточного цикла и апоптоза, косвенно при повреждении эндотелия
-PID TELOMERASE, AURORA B
-Клеточный рост, деление — скорее «базовые» процессы
-PID AR, FOXO, ILK
-Метаболизм, стресс-ответ — могут косвенно модулировать воспаление
-PID ECADHERIN/N-CADHERIN/NECTIN
-Адгезия эндотелиальных клеток — важно для повреждения сосудистой стенки, что реально важно при AMR
-**Визуализация путей PID**
-```{r}
-msig_go_bp <- msigdbr(species = "Homo sapiens", category = "C7", subcategory = "IMMUNESIGDB")
-
-
-IMMUNESIGDB_targets_brownRNA <- enricher(gene = targets_brownRNA, TERM2GENE = msig_go_bp[, c("gs_name", "gene_symbol")])
-
-plt <- dotplot(IMMUNESIGDB_targets_brownRNA, showCategory = 20) +
-  ggtitle("IMMUNESIGDB Enrichment for targets_brownRNA") +
-  theme(
-    plot.title = element_text(size = 14, face = "bold"),
-    axis.text.y = element_text(size = 12)
-  )
-plt
-ggsave("./pictures_transpl/transpl_GO_enrichment_emapplot_UP_CAV_KEGG.tiff", plot = plt, width = 16, height = 10, dpi = 300)
-```
-
-*Справка по базам данным, по которым можно провести обогащение*
-1. C1 (Genomic Signature Prediction)
-	•	Включает генетические сигнатуры, которые используются для предсказания различных фенотипов или состояний, основанных на генетической информации. 299
-2. C2 (Curated Gene Sets)
-	•	CGP: Gene sets curated for cancer genomics 3384
-	•	CP: Gene sets curated for canonical pathways  29
-	•	CP:BIOCARTA: 292
-	•	CP:KEGG: 186
-	•	CP:PID: Pathway Interaction Database 196
-	•	CP:REACTOME: 1615
-	•	CP:WIKIPATHWAYS: 664
-3. C3 (Motif and Transcription Factor Gene Sets)
-	•	MIR:MIRDB: Наборы микроРНК из базы данных MIRDB.  2377
-	•	MIR_Legacy: Старые наборы микроРНК.  221
-	•	TFT:GTRD: Наборы генов, связанные с факторами транскрипции из GTRD (Gene Transcription Regulation Database).  518
-	•	TFT:TFT_Legacy: Старые наборы факторов транскрипции. 610
-4. C4 (Computational Gene Sets)
-	•	CGN: Наборы генов, связанные с компьютерными моделями или системами. 427
-	•	CM: Математические или вычислительные модели для анализа данных генетики. 431
-5. C5 (Gene Ontology Gene Sets)
-	•	GO:BP: Наборы генов, связанные с биологическими процессами (Biological Process). 7658
-	•	GO:CC: Наборы генов, связанные с клеточными компонентами (ACR Component).  1006
-	•	GO:MF: Наборы генов, связанные с молекулярной функции (Molecular Function). 1738
-	•	HPO: Наборы генов, связанные с фенотипами, описанными в Human Phenotype Ontology. 5071
-6. C6 (Oncogenic Signatures)
-	•	Включает наборы генов, связанные с онкогенами и раковыми клетками. 189
-7. C7 (Immunologic Signature Gene Sets)
-	•	IMMUNESIGDB: Наборы генов, связанные с иммунной системой, включая иммуно-онкологию и другие аспекты иммунитета.  4872
-	•	VAX: Наборы генов, связанные с вакцинацией. 347
-8. C8 (Cell Type Signature Gene Sets)
-	•	Наборы генов, ассоциированные с различными типами клеток 700
-9. H (Hallmark Gene Sets)
-	•	Включает Hallmark Gene Sets, которые представляют ключевые биологические процессы и функции, общие для множества типов клеток и состояний. 50
-	
-```{r}
-all_df <- read.csv("data/mapped.csv", header = TRUE, sep = ",")
-all_df <- all_df[, -c(1, 2)]
-cols <- c("exact.miRNA", "hairpin.miRNA", "mature.tRNA", "primary.tRNA", "snoRNA", "rRNA", "ncrna.others", "mRNA", "isomiR.miRNA")
-all_df[cols] <- lapply(all_df[cols], function(x) ifelse(x == "", NA, x))
-str(all_df)
-```
-
-```{r}
-all_df$merged_col <- apply(all_df[, c("exact.miRNA", "hairpin.miRNA", "mature.tRNA", "primary.tRNA", "snoRNA", "rRNA", "ncrna.others", "mRNA", "isomiR.miRNA")], 1, function(x) na.omit(x)[1])
-all_df <- all_df[, -c(1:9)]
-all_df
-```
+dds_lrt <- DESeq(dds_nr_ref, test = "LRT", reduced = ~ 1)
 
-```{r}
-collapsed_df <- all_df %>%
-  group_by(merged_col) %>%
-  summarise(across(everything(), sum, na.rm = FALSE)) %>%
-  as.data.frame()  
-rownames(collapsed_df) <- collapsed_df$merged_col
-collapsed_df$merged_col <- NULL 
-# write.csv(collapsed_df, file="./collapsed_df.csv")
-```
-
-```{r}
-# collapsed_df <- read.csv("./collapsed_df.csv", header = TRUE, sep = ",")
-rownames(collapsed_df) <- collapsed_df$X
-collapsed_df$X <- NULL
-collapsed_df
-```
-```{r}
-colnames(collapsed_df) <- gsub("^X", "", colnames(collapsed_df))
-common_samples <- intersect(colnames(collapsed_df), coldata$sample)
-collapsed_df <- rownames_to_column(collapsed_df, var = "ncRNA")
-
-collapsed_df <- collapsed_df[, c("ncRNA", common_samples)] 
-# collapsed_df <- collapsed_df[, rownames(coldata)] #ранжирую по колонке в counts так же как и названия строк в coldata
-rownames(collapsed_df) <- collapsed_df$ncRNA
-collapsed_df$ncRNA <- NULL
-head(collapsed_df)
-```
-t-SNE = t-distributed Stochastic Neighbor Embedding
-
-Это алгоритм для понижения размерности, часто используемый для визуализации высокоразмерных данных 
-Как t-SNE работает:
-	1.	Считает расстояния между всеми парами точек во входных данных.
-	2.	Строит вероятности того, что точка A выберет точку B как соседа. (насколько точка A считает точку B близкой?)
-	•	Точки, которые были близки → останутся рядом.
-	•	Далёкие точки → могут оказаться где угодно.
-Главное не измерять расстояния между кластерами — это может быть иллюзией.
-
-https://distill.pub/2016/misread-tsne/
-```{r}
-tsne_input <- t(as.matrix(collapsed_df[, -1]))  # исключаем колонку ncRNA
-
-#самое сомнительное
-set.seed(41)  # для воспроизводимости
-tsne_result <- Rtsne(tsne_input, dims = 2, perplexity = 5, verbose = TRUE, max_iter = 500)
-
-
-tsne_df <- data.frame(
-  Sample = rownames(tsne_input),
-  tSNE1 = tsne_result$Y[,1],
-  tSNE2 = tsne_result$Y[,2]
-)
-
-tsne_df <- merge(tsne_df, coldata, by.x = "Sample", by.y = "sample")
-tsne_df$Sample <- gsub("_.*", "", tsne_df$Sample)
-
-plt <- ggplot(tsne_df, aes(x = tSNE1, y = tSNE2, color = condition)) +
-  geom_point(size = 3, alpha = 0.8) +
-  geom_text(aes(label=Sample), size=3, vjust=1.5) +
-  theme_minimal() +
-  labs(title = "t-SNE plot", x = "tSNE 1", y = "tSNE 2")
-
-plt
-ggsave("./pictures_transpl2/transpl_tSNE_plot.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+res_all <- results(dds_lrt, alpha = 0.05)
+summary(res_all)
 ```
 ```{r}
-tsne_input <- t(as.matrix(counts[, -1]))  # исключаем колонку ncRNA
-
-#самое сомнительное
-set.seed(41) 
-tsne_result <- Rtsne(tsne_input, dims = 2, perplexity = 5, verbose = TRUE, max_iter = 500)
-
-tsne_df <- data.frame(
-  Sample = rownames(tsne_input),
-  tSNE1 = tsne_result$Y[,1],
-  tSNE2 = tsne_result$Y[,2]
-)
-
-tsne_df <- merge(tsne_df, coldata, by.x = "Sample", by.y = "sample")
-tsne_df$Sample <- gsub("_.*", "", tsne_df$Sample)
-
-plt <- ggplot(tsne_df, aes(x = tSNE1, y = tSNE2, color = condition)) +
-  geom_point(size = 3, alpha = 0.8) +
-  geom_text(aes(label=Sample), size=3, vjust=1.5) +
-  theme_minimal() +
-  labs(title = "t-SNE plot", x = "tSNE 1", y = "tSNE 2")
-plt
-ggsave("./pictures_transpl2/transpl_tSNE_plot_only_miR.tiff", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+res_all_sign <- as.data.frame(subset(res_all, padj < 0.05 & !is.na(padj)))
+res_all_sign
 ```
-
 

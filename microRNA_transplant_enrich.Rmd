@@ -1,0 +1,160 @@
+---
+title: "micro-RNA Heart Transplantation - Enrichment analysis"
+output:
+  html_notebook: default
+---
+## Setup & Libraries ##
+```{r}
+library(dplyr)
+library(org.Hs.eg.db)
+library(multiMiR)
+library(miRBaseConverter)
+library(enrichplot)
+library(igraph)
+library(ggraph)
+library(patchwork)
+library(ReactomePA)
+library(clusterProfiler)
+```
+
+## Enrichment analysis ##
+**MIMAT ID Conversion**
+Converting mature miRNA names to MIMAT Accession IDs using miRBase to ensure accurate querying against target databases.
+```{r}
+mirs <- miRNAVersionConvert(c("hsa-miR-125b-5p",
+                              "hsa-miR-193b-5p", "hsa-miR-5588-5p"))$Accession
+mirs
+```
+**Validated Targets Retrieval**
+Retrieving experimentally validated miRNA-target interactions strictly from the miRTarBase database using the multiMiR package, filtering out empty gene symbols.
+```{r}
+mm_val <- get_multimir(
+  org = "hsa",
+  mirna = mirs,
+  table = "validated"
+)
+
+df_val <- mm_val@data %>%
+  dplyr::filter(database == "mirtarbase") %>%
+  dplyr::select(mature_mirna_id, target_symbol) %>%
+  dplyr::distinct() %>%
+  dplyr::filter(target_symbol != "")
+
+unique(df_val$mature_mirna_id)
+```
+**Gene ID Mapping**
+Converting target gene SYMBOLs to ENTREZ IDs via clusterProfiler to prepare the data for downstream pathway enrichment analysis.
+```{r}
+entrez_ids <- bitr(
+  unique(df_val$target_symbol),
+  fromType = "SYMBOL",
+  toType = "ENTREZID",
+  OrgDb = org.Hs.eg.db
+)
+```
+**Merging Mapped IDs**
+Joining the ENTREZ IDs back to the original target data frame.
+```{r}
+df_mapped <- dplyr::inner_join(df_val, entrez_ids, by = c("target_symbol" = "SYMBOL"))
+df_mapped
+```
+**Target Gene Summary**
+Calculating the total number of unique validated target genes for each candidate miRNA to evaluate their regulatory scope.
+```{r}
+miRNA_summary <- df_mapped %>%
+  dplyr::group_by(mature_mirna_id) %>%
+  dplyr::summarise(
+    unique_genes_count = dplyr::n_distinct(target_symbol),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(desc(unique_genes_count)) 
+
+print(miRNA_summary)
+```
+**Comparative Enrichment Analysis, Figure 3**
+Performing functional enrichment analysis across candidate miRNAs for Gene Ontology (Biological Processes) and Reactome Pathways to identify overrepresented biological functions.
+```{r}
+# --- Gene Ontology (Biological processes) ---
+go_compare <- compareCluster(
+  ENTREZID ~ mature_mirna_id,
+  data = df_mapped,
+  fun = "enrichGO",
+  OrgDb = org.Hs.eg.db,
+  ont = "BP",
+  pvalueCutoff = 0.05,
+  readable = TRUE 
+)
+# --- Reactome Pathways ---
+comp_reactome <- compareCluster(
+  ENTREZID ~ mature_mirna_id, 
+  data = df_mapped, 
+  fun = "enrichPathway",
+  pvalueCutoff = 0.05
+)
+```
+**Enrichment Visualization**
+Generating and merging dot plots for GO and Reactome enrichment results, adjusting label length for readability, and exporting the combined figure to SVG format.
+```{r}
+p_go <- dotplot(go_compare, showCategory = 20, label_format = 50) + # 40 символов на строку
+  ggtitle("GO: Biological Process") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+p_reactome <- dotplot(comp_reactome, showCategory = 20, label_format = 50) + 
+  ggtitle("Reactome Pathways") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+plt <- p_go | p_reactome
+plt
+ggsave("./pictures_transpl/Enrichment.svg", plot = plt, width = 13, height = 10, dpi = 300)
+ggsave("./pictures_transpl/Enrichment.png", plot = plt, width = 13, height = 10, dpi = 300)
+```
+## Network Visualization ##
+**Shared Target Filtering**
+```{r}
+df_shared <- df_val %>%
+  dplyr::group_by(target_symbol) %>%
+  dplyr::filter(dplyr::n_distinct(mature_mirna_id) >= 2) %>%
+  dplyr::ungroup()
+df_shared
+```
+**Hub Gene Summary**
+```{r}
+df_shared_summary <- df_shared %>%
+  dplyr::group_by(target_symbol) %>%
+  dplyr::summarise(
+    n_interactions = dplyr::n_distinct(mature_mirna_id),
+    miRNAs = paste(unique(mature_mirna_id), collapse = "; "),
+    .groups = "drop"
+  ) %>%
+  dplyr::arrange(desc(n_interactions)) 
+
+df_shared_summary
+```
+**miRNA Interaction Frequency**
+```{r}
+gene_freq <- df_shared %>%
+   dplyr::count(mature_mirna_id, name = "n_target") %>%
+   dplyr::arrange(desc(n_target))
+
+print(gene_freq)
+```
+**miRNA-mRNA Network Visualization, Figure 4**
+```{r}
+g <- graph_from_data_frame(df_shared, directed = FALSE)
+
+V(g)$type <- ifelse(V(g)$name %in% unique(df_shared$mature_mirna_id), "miRNA", "Gene")
+
+set.seed(123)
+plt <- ggraph(g, layout = "stress") + 
+  geom_edge_link0(color = "gray80", alpha = 0.7, width = 1) +
+  geom_node_point(aes(color = type, size = type)) +
+  scale_color_manual(values = c("Gene" = "#4575b4", "miRNA" = "#d73027")) +
+  scale_size_manual(values = c("Gene" = 4, "miRNA" = 10)) +
+  geom_node_text(aes(label = name), repel = TRUE, size = 3.5, fontface = "bold", color = "black") +
+  theme_graph() +
+  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+print(plt)
+ggsave("./pictures_transpl/Network_plot.svg", plot = plt, width = 10, height = 8, dpi = 300, bg = "white")
+ggsave("./pictures_transpl/Network_plot.png", plot = plt, width = 10, height = 8, dpi = 300, bg = "white")
+
+```
