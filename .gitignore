@@ -10,11 +10,6 @@
 *_cache/
 *_files/
 
-# large data
-data/*.csv
-
-# results
-results/
 
 # logs
 *.log
