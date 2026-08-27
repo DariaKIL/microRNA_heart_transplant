@@ -37,7 +37,8 @@ The repository is organized to ensure full reproducibility of the figures and st
 └── microRNA_transplant_enrich.Rmd         # Part 2: Target prediction & Networks
 ```
 ## Analysis Pipeline
-**1. Differential Expression Analysis (microRNA_transplant.Rmd)**
+**1. Differential Expression Analysis (microRNA_transplant.Rmd)**  
+
 This notebook covers the primary processing of the small RNA-seq data:
 
 *Quality Control & Exploratory Data Analysis:* RNA class distribution (Figure 1A) and PCA/Sample distance heatmap.
@@ -50,14 +51,15 @@ This notebook covers the primary processing of the small RNA-seq data:
 
 *Visualizations:* Volcano plots, Venn diagrams (transcriptome intersections), and normalized expression boxplots.
 
-**2. Target Prediction & Enrichment (microRNA_transplant_enrich.Rmd)**
-This notebook explores the biological role of the identified candidate miRNAs:
+**2. Target Prediction & Enrichment (microRNA_transplant_enrich.Rmd)**  
 
-*In Silico Target Prediction:* Retrieval of experimentally validated targets from miRTarBase via multiMiR.
+This notebook explores the biological role of the identified candidate miRNAs:  
 
-*Functional Enrichment:* GO (Biological Process) and Reactome pathway analysis using clusterProfiler.
+*In Silico Target Prediction:* Retrieval of experimentally validated targets from miRTarBase via multiMiR.  
 
-*Network Analysis:* Construction of miRNA-mRNA interaction networks identifying central "hub" genes, visualized with ggraph.
+*Functional Enrichment:* GO (Biological Process) and Reactome pathway analysis using clusterProfiler.  
+
+*Network Analysis:* Construction of miRNA-mRNA interaction networks identifying central "hub" genes, visualized with ggraph.  
 
 ## 📊 HTML Reports
 
