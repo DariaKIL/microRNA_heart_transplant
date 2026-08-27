@@ -63,8 +63,9 @@ This notebook explores the biological role of the identified candidate miRNAs:
 
 Compiled HTML notebooks with full code execution, statistical outputs, and interactive tables are available for direct viewing in your browser:
 
-* 📄 [**Part 1: Differential Expression Analysis**](https://htmlpreview.github.io/?https://github.com/DariaKIL/ncRNA_heart_transplant/microRNA_transplant.nb.html)
-* 📄 [**Part 2: Target Prediction & Enrichment**](https://htmlpreview.github.io/?https://github.com/DariaKIL/ncRNA_heart_transplant/microRNA_transplant_enrich.nb.html)
+* 📄 [**Part 1: Differential Expression Analysis**](https://htmlpreview.github.io/?https://github.com/DariaKIL/ncRNA_heart_transplant/blob/main/microRNA_transplant.nb.html)  
+* 📄 [**Part 2: Target Prediction & Enrichment**](https://htmlpreview.github.io/?https://github.com/DariaKIL/ncRNA_heart_transplant/blob/main/microRNA_transplant_enrich.nb.html)
+*(Note: Links use HTMLPreview to render the files directly from GitHub).*
 
 **Requirements & Reproducibility**
 To run the scripts locally, you need R (>= 4.2) and the following primary libraries:
