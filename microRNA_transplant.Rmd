@@ -1,7 +1,8 @@
 ---
-title: "ncRNA Heart Transplantation"
-output:
-  html_notebook: default
+title: "micro-RNA Heart Transplantation - Differential expression analysis"
+output: 
+  html_document:
+    keep_md: no
 ---
 ## Setup & Libraries ##
 ```{r}
@@ -166,7 +167,7 @@ extract_and_plot <- function(dds, target_coef, plot_title, save_path) {
   resLFC <- lfcShrink(dds, coef = target_coef, type = "apeglm")
   
   res_sign <- as.data.frame(subset(res, padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 1))
-  resLFC_sign <- as.data.frame(subset(resLFC, padj < 0.05 & !is.na(padj) & abs(log2FoldChange) > 1))
+  resLFC_sign <- as.data.frame(subset(resLFC, padj < 0.05 & !is.na(padj)))
   
   plt <- EnhancedVolcano(
     res,
@@ -269,8 +270,6 @@ print(plt)
 ggsave("./pictures_transpl/126281-g003.png", plot = plt, width = 168, height = 75, units = "mm", dpi = 500)
 ggsave("./pictures_transpl/126281-g003.svg", plot = plt, width = 168, height = 75, units = "mm")
 ```
-
-
 **Differential expression analysis for Acute Cellular Rejection (ACR vs NR)**
 ```{r}
 res_ACR_vs_NR <- extract_and_plot(
@@ -313,9 +312,11 @@ res_AMR_vs_ACR$plot
 ```
 ```{r}
 res_AMR_vs_ACR$sig_raw
+write.csv(res_AMR_vs_ACR$sig_raw, "res_AMR_vs_ACR.csv", row.names = TRUE)
 ```
 ```{r}
 res_AMR_vs_ACR$sig_shrunken
+write.csv(res_AMR_vs_ACR$sig_shrunken, "res_AMR_vs_ACR_shr.csv", row.names = TRUE)
 ```
 **Changing the baseline to ACR to identify differences between rejection types (CAV vs ACR)**
 ```{r}
@@ -343,9 +344,11 @@ res_AMR_vs_CAV$plot
 ```
 ```{r}
 res_AMR_vs_CAV$sig_raw
+write.csv(res_AMR_vs_CAV$sig_raw, "res_AMR_vs_CAV.csv", row.names = TRUE)
 ```
 ```{r}
 res_AMR_vs_CAV$sig_shrunken 
+write.csv(res_AMR_vs_CAV$sig_shrunken, "res_AMR_vs_CAV_shr.csv", row.names = TRUE)
 ```
 **Changing the baseline to CAV to evaluate ACR vs CAV**
 ```{r}
