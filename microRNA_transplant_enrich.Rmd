@@ -5,6 +5,7 @@ output:
 ---
 ## Setup & Libraries ##
 ```{r}
+library(ggplot2)
 library(dplyr)
 library(org.Hs.eg.db)
 library(multiMiR)
@@ -95,19 +96,60 @@ comp_reactome <- compareCluster(
 **Enrichment Visualization**
 Generating and merging dot plots for GO and Reactome enrichment results, adjusting label length for readability, and exporting the combined figure to SVG format.
 ```{r}
-p_go <- dotplot(go_compare, showCategory = 20, label_format = 50) + # 40 символов на строку
-  ggtitle("GO: Biological Process") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+safe_colors <- list(
+  scale_color_gradient2(
+    low = "grey90", mid = "#FF6600", high = "#0099FF", 
+    name = "p.adjust",
+    guide = guide_colorbar(reverse = TRUE, order = 1) 
+  ),
+  scale_fill_gradient2(
+    low = "grey90", mid = "#FF6600", high = "#0099FF", 
+    name = "p.adjust",
+    guide = guide_colorbar(reverse = TRUE, order = 1)
+  )
+)
 
-p_reactome <- dotplot(comp_reactome, showCategory = 20, label_format = 50) + 
-  ggtitle("Reactome Pathways") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+journal_theme <- theme_bw(base_family = "Tahoma", base_size = 7) +
+  theme(
+    axis.text = element_text(color = "black"),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1),
+    axis.line = element_line(color = "black", linewidth = 0.3),
+    axis.ticks = element_line(color = "black", linewidth = 0.3),
+    axis.ticks.length = unit(1, "mm"),
+    plot.title = element_text(face = "bold", size = 8),
+    legend.key.size = unit(3, "mm"),
+    legend.title = element_text(size = 7, face = "bold"),
+    legend.text = element_text(size = 6),
+    panel.grid.minor = element_blank()
+  )
 
-plt <- p_go | p_reactome
-plt
-ggsave("./pictures_transpl/Enrichment.svg", plot = plt, width = 13, height = 10, dpi = 300)
-ggsave("./pictures_transpl/Enrichment.png", plot = plt, width = 13, height = 10, dpi = 300)
+p_go <- dotplot(go_compare, showCategory = 20, label_format = 35) +
+  ggtitle("GO: Biological process") +
+  safe_colors +
+  journal_theme +
+  guides(size = guide_legend(order = 2)) 
+
+p_reactome <- dotplot(comp_reactome, showCategory = 20, label_format = 35) + 
+  ggtitle("Reactome pathways") +
+  safe_colors +
+  journal_theme +
+  guides(size = guide_legend(order = 2))
+
+final_plt <- (p_go | p_reactome) + 
+  plot_annotation(tag_levels = 'A') & 
+  theme(
+    plot.tag = element_text(family = "Tahoma", face = "bold", size = 10),
+    plot.margin = margin(2, 2, 2, 2, "mm"),
+    panel.spacing = unit(4, "mm")
+  )
+
+ggsave("./pictures_transpl/126281-g004.png", plot = final_plt, 
+       width = 168, height = 150, units = "mm", dpi = 600, bg = "white")
+ggsave("./pictures_transpl/126281-g004.svg", plot = final_plt, 
+       width = 168, height = 150, units = "mm", bg = "white")
+final_plt
 ```
+
 ## Network Visualization ##
 **Shared Target Filtering**
 ```{r}
@@ -145,16 +187,36 @@ g <- graph_from_data_frame(df_shared, directed = FALSE)
 V(g)$type <- ifelse(V(g)$name %in% unique(df_shared$mature_mirna_id), "miRNA", "Gene")
 
 set.seed(123)
+
 plt <- ggraph(g, layout = "stress") + 
   geom_edge_link0(color = "gray80", alpha = 0.7, width = 1) +
   geom_node_point(aes(color = type, size = type)) +
-  scale_color_manual(values = c("Gene" = "#4575b4", "miRNA" = "#d73027")) +
+  
+  scale_color_manual(values = c("Gene" = "#56B4E9", "miRNA" = "#E69F00")) +
   scale_size_manual(values = c("Gene" = 4, "miRNA" = 10)) +
-  geom_node_text(aes(label = name), repel = TRUE, size = 3.5, fontface = "bold", color = "black") +
-  theme_graph() +
-  theme(legend.position = "bottom", plot.title = element_text(hjust = 0.5, face = "bold", size = 14))
+  
+  geom_node_text(
+    aes(label = name), 
+    repel = TRUE, 
+    size = 2.5, 
+    fontface = "bold", 
+    color = "black",
+    family = "Tahoma" 
+  ) +
+  
+  theme_graph(base_family = "Tahoma", base_size = 7) + 
+  theme(
+    legend.position = "bottom", 
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 8),
+    legend.title = element_text(face = "bold", size = 7),
+    legend.text = element_text(size = 7)
+  )
+
 print(plt)
-ggsave("./pictures_transpl/Network_plot.svg", plot = plt, width = 10, height = 8, dpi = 300, bg = "white")
-ggsave("./pictures_transpl/Network_plot.png", plot = plt, width = 10, height = 8, dpi = 300, bg = "white")
+
+ggsave("./pictures_transpl/126281-g005.png", plot = plt, 
+       width = 168, height = 140, units = "mm", dpi = 600, bg = "white")
+ggsave("./pictures_transpl/126281-g005.svg", plot = plt, 
+       width = 168, height = 140, units = "mm", dpi = 600, bg = "white")
 
 ```

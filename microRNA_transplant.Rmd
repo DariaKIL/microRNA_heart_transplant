@@ -5,6 +5,7 @@ output:
 ---
 ## Setup & Libraries ##
 ```{r}
+library(ggplot2)
 library(tidyverse)
 library(DESeq2)
 library(pheatmap)
@@ -12,6 +13,9 @@ library(RColorBrewer)
 library(EnhancedVolcano)
 library(vsn)
 library(ggvenn)
+library(patchwork)
+library(ggplotify)
+library(ggrepel)
 ```
 ## Data Import ##
 **Importing Clinical Data**
@@ -52,6 +56,10 @@ summed_anno
 **Total read counts stratified by RNA type for each sample, Figure 1A**
 Generating a stacked bar plot of the absolute read counts (in millions) across various RNA biotypes for each sample, faceted by clinical group.
 ```{r}
+library(showtext)
+font_add("Tahoma", regular = "tahoma.ttf")
+showtext_auto()
+
 merged_df$Sample.name.s. <- gsub("_.*", "", merged_df$Sample.name.s.)
 anno_long <- merged_df %>%
   pivot_longer(
@@ -60,26 +68,49 @@ anno_long <- merged_df %>%
     values_to = "Count"
   )
 
-plt <- ggplot(anno_long, aes(x = as.character(Sample.name.s.), y = Count / 1000000, fill = RNA_Class)) +
+rna_labels <- c(
+  "Filtered.miRNA.Reads" = "Filtered miRNA",
+  "Hairpin.miRNAs"       = "Hairpin miRNA",
+  "mature.tRNA.Reads"    = "Mature tRNA",
+  "mRNA.Reads"           = "mRNA",
+  "ncRNA.others"         = "Other ncRNA",
+  "primary.tRNA.Reads"   = "Primary tRNA",
+  "rRNA.Reads"           = "rRNA",
+  "snoRNA.Reads"         = "snoRNA"
+)
+
+plot_bars <- ggplot(anno_long, aes(x = as.character(Sample.name.s.), y = Count / 1000000, fill = RNA_Class)) +
   geom_col(width = 0.85) + 
-  
   facet_grid(~ condition, scales = "free_x", space = "free_x") +
-  
   labs(x = "Sample ID", y = "Read Count (Millions)") +
-  scale_fill_brewer(palette = "Set3", name = "RNA Class") +
+  
+  scale_fill_brewer(palette = "Set3", name = "RNA Class", labels = rna_labels) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05))) +
-  theme_minimal() +
+  theme_bw(base_family = "Tahoma", base_size = 7) +
+  
   theme(
-    strip.background = element_rect(fill = "grey85", color = "white", linewidth = 2),
-    strip.text = element_text(face = "bold", size = 11, color = "black"),
+    text = element_text(family = "Tahoma"),
+    strip.background = element_rect(fill = "white", color = "white", linewidth = 2),
+    strip.text = element_text(face = "plain", size = 8, color = "black"), 
     
+    axis.line = element_line(color = "black", linewidth = 0.3),
+    axis.ticks = element_line(color = "black", linewidth = 0.3),
+    axis.ticks.length = unit(1, "mm"),
+    axis.text = element_text(family = "Tahoma", color = "black"),
+    panel.border = element_blank(),
     panel.grid.major.x = element_blank(),
     panel.grid.minor = element_blank(),
-    panel.spacing = unit(0.2, "lines")
+    panel.spacing = unit(4, "mm"),
+    legend.key.size = unit(4, "mm")
   )
-ggsave("./pictures_transpl/plot_distr.svg", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
-print(plt)
+
+print(plot_bars)
+
+ggsave("./pictures_transpl/plot_distr.png", plot = plot_bars, 
+       width = 168, height = 110, units = "mm", dpi = 500, bg = "white")
 ```
+
+
 **Additional calculations**
 Computing the total sum of reads for each sample
 ```{r}
@@ -142,23 +173,26 @@ extract_and_plot <- function(dds, target_coef, plot_title, save_path) {
     lab = rownames(res),
     x = 'log2FoldChange',
     y = 'padj',
-    subtitle = NULL,    
-    legendLabels = c('NS', 'Log2 FC', 'p-adj', 'p-adj and Log2 FC'),
-    ylab = bquote(~-Log[10]~ 'Padj'),
+    subtitle = NULL,  
+    caption = NULL,
+    legendLabels = c('NS', 'Log2 FC', 'P-adjusted', 'P-adjusted and Log2 FC'),
+    ylab = bquote(~-Log[10]~ 'P-adjusted'),
     pCutoff = 0.05,
     FCcutoff = 1.0,
-    labSize = 4.0,
+    labSize = 3.0, 
     boxedLabels = FALSE,
-    col = c('black', '#CBD5E8', '#B3E2CD', 'red'),
+    col = c('black', '#CBD5E8', '#B3E2CD', "#FF6600"),
     colAlpha = 1,
-    title = plot_title,
+    title = NULL,
     selectLab = rownames(res_sign),  
     drawConnectors = TRUE,
     xlim = c(-10, 10),  
     ylim = c(0, 5)
-  )
+)
   
-  ggsave(save_path, plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+  plt <- plt + 
+    theme_bw(base_family = "Tahoma", base_size = 7)
+  ggsave(save_path, plot = plt, width = 8, height = 6, dpi = 500, bg = "white")
   
   return(list(
     res_raw = res,
@@ -201,24 +235,39 @@ for (mirna in target_mirnas) {
   all_counts <- rbind(all_counts, count_data)
 }
 
+safe_colors <- c(ACR = "#E69F00", AMR = "#56B4E9", CAV = "#CC79A7", NR = "#999999") 
+
 plt <- ggplot(all_counts, aes(x=condition, y=count, fill=condition)) +
-  geom_boxplot(alpha=0.5, outlier.shape = NA) + 
-  geom_jitter(width=0.2, size=2, alpha=0.7) +
-  geom_text_repel(aes(label=sample), size=4) + 
+  geom_boxplot(alpha=0.6, outlier.shape = NA, color="black", linewidth=0.3) + 
+  
+  geom_jitter(width=0.2, size=1.2, alpha=0.8, shape=21, color="black") +
+  
+  geom_text_repel(aes(label=sample), size=2, max.overlaps=15) + 
+  
   scale_y_log10() +
+  scale_fill_manual(values = safe_colors) + 
   facet_wrap(~ miRNA, scales="free_y", ncol=3) + 
-  labs(y = "Normalized Expression Counts", x = "Clinical Group") + 
-  theme_bw() + 
+  
+  labs(y = "Normalized expression counts", x = "Clinical group") + 
+  theme_classic(base_family = "Tahoma", base_size = 7) + 
+  
   theme(
-    strip.text = element_text(size = 13, face = "bold"), 
-    strip.background = element_rect(fill = "grey90"),    
+    strip.text = element_text(size = 7, face = "bold.italic"), 
+    strip.background = element_rect(fill = NA, color = NA),
     legend.position = "none",
-    aspect.ratio = 0.7  
+    
+    axis.line = element_line(color = "black", linewidth = 0.3),
+    axis.ticks = element_line(color = "black", linewidth = 0.3),
+    axis.ticks.length = unit(1, "mm"),
+    axis.text = element_text(color = "black"),
+    panel.spacing = unit(4, "mm") 
   )
 
 print(plt)
-ggsave("./pictures_transpl/transpl_boxplots_AMR.svg", plot = plt, width = 16, height = 10, dpi = 300)
-ggsave("./pictures_transpl/transpl_boxplots_AMR.png", plot = plt, width = 16, height = 10, dpi = 300)
+# Statistical graphs should have 300-500 dpi[cite: 1].
+# Figures should be submitted in lossless PNG format[cite: 1].
+ggsave("./pictures_transpl/126281-g003.png", plot = plt, width = 168, height = 75, units = "mm", dpi = 500)
+ggsave("./pictures_transpl/126281-g003.svg", plot = plt, width = 168, height = 75, units = "mm")
 ```
 
 
@@ -280,7 +329,7 @@ res_CAV_vs_ACR$sig_raw
 res_CAV_vs_ACR$sig_shrunken 
 ```
 ### Pairwise Comparisons with CAV (CAV as Reference) ###
-**Differential expression analysis for Antibody-Mediated Rejection (AMR vs NR), Figure 2C**
+**Differential expression analysis for Antibody-Mediated Rejection (AMR vs NR), Figure 2B**
 ```{r}
 dds_cav_ref <- run_deseq_pipeline(counts, coldata, ~ condition, "CAV")
 
@@ -310,7 +359,7 @@ res_ACR_vs_CAV$sig_raw
 res_ACR_vs_CAV$sig_shrunken 
 ```
 ### Covariate-Adjusted Model ###
-**Adding antibody status (antibody) to the model design (~ antibody + condition) to account for the potential confounding effect of HLA sensitization on the expression profile, Figure 2B**
+**Adding antibody status (antibody) to the model design (~ antibody + condition) to account for the potential confounding effect of HLA sensitization on the expression profile, Figure 2C**
 ```{r}
 dds_covariates <- run_deseq_pipeline(counts, coldata, ~ antibody + condition, "NR")
 
@@ -354,17 +403,21 @@ venn_list <- list(
   CAV = get_filtered_mirnas("CAV")
 )
 
-plt <- ggvenn(
+plot_venn <- ggvenn(
   venn_list,
-  fill_color = c("#4CAF50", "#FF9800", "#2196F3", "#ec8678"),
+  fill_color = c("#999999", "#E69F00", "#56B4E9", "#CC79A7"),
   fill_alpha = 0.5,
   stroke_size = 0,
-  set_name_size = 5,
-  text_size = 4
+  
+  set_name_size = 3, 
+  text_size = 2      
 )
 
-print(plt)
-ggsave("./pictures_transpl/venna_plot.svg", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+plot_venn <- plot_venn + 
+  theme_void(base_family = "Tahoma")
+
+print(plot_venn)
+ggsave("./pictures_transpl/venna_plot.svg", plot = plot_venn, width = 8, height = 6, dpi = 500, bg = "white")
 ```
 ## Unsupervised Clustering & PCA ##
 **Applying a regularized logarithm (rlog) transformation to the DESeq2 object to stabilize the variance prior to clustering methods. The meanSdPlot confirms the removal of variance dependence on the mean**
@@ -380,14 +433,14 @@ pcaData <- plotPCA(rlt, intgroup=c("condition", "antibody"), returnData = TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 
 pcaData$sample <- gsub("_.*", "", rownames(pcaData))
+ 
+custom_palette <- c(ACR = "#E69F00", AMR = "#56B4E9", CAV = "#CC79A7", NR = "#999999")
 
-custom_palette <- c(ACR = "#f2b870", AMR = "#8EB0CE", CAV = "#ec8678", NR = "#9cd2c6")
-
-plt <- ggplot(pcaData, aes(PC1, PC2, color = condition, shape = antibody)) +
+plot_pca <- ggplot(pcaData, aes(PC1, PC2, color = condition, shape = antibody)) +
   geom_point(size = 3) +
   geom_text_repel(
     aes(label = sample),
-    size = 4,
+    size = 2, 
     box.padding = 0.4,
     point.padding = 0.3,
     segment.color = "grey50",
@@ -397,11 +450,27 @@ plt <- ggplot(pcaData, aes(PC1, PC2, color = condition, shape = antibody)) +
   xlab(paste0("PC1: ", percentVar[1], "%")) +
   ylab(paste0("PC2: ", percentVar[2], "%")) +
   coord_fixed() +
-  theme_bw() +
-  scale_color_manual(values = custom_palette)
+  
+  theme_bw(base_family = "Tahoma", base_size = 7) +
+  scale_color_manual(values = custom_palette) +
+  
 
-plt
-ggsave("./pictures_transpl/transpl_PCA_plot.svg", plot = plt, width = 8, height = 6, dpi = 300, bg = "white")
+  theme(
+    axis.line = element_line(color = "black", linewidth = 0.3),
+    axis.ticks = element_line(color = "black", linewidth = 0.3),
+    axis.ticks.length = unit(1, "mm"),
+    axis.text = element_text(color = "black"),
+    
+    legend.key.size = unit(3, "mm"),
+    legend.title = element_text(size = 7, face = "bold"),
+    legend.text = element_text(size = 6),
+    
+    panel.border = element_blank(),
+    panel.grid.minor = element_blank()
+  )
+
+plot_pca
+ggsave("./pictures_transpl/transpl_PCA_plot.svg", plot = plot_pca, width = 8, height = 6, dpi = 500, bg = "white")
 ```
 ## Sample Distance Heatmap ##
 **Distance-based heatmap of inter-sample correlations, annotated by clinical group and contemporaneous anti-HLA antibody status, Figure 1C**
@@ -422,23 +491,33 @@ colnames(anno_df) <- c("Condition", "Antibody")
 
 # Define custom colors for your annotations to match the image
 anno_colors <- list(
-  Condition = c(ACR = "#f2b870", AMR = "#8EB0CE", CAV = "#ec8678", NR = "#9cd2c6"),
-  Antibody = c(yes = "#C25983", no = "#E2E2E2")
+  Condition =  c(ACR = "#E69F00", AMR = "#56B4E9", CAV = "#CC79A7", NR = "#999999"),
+  Antibody = c(yes = "#FF6600", no = "#E2E2E2")
 )
 colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255) 
 
-plt <- pheatmap(
+plot_hm <- pheatmap(
   sampleDistMatrix,
   clustering_distance_rows = "euclidean", 
   clustering_distance_cols = "euclidean",
   color = colors,                        
   annotation_col = anno_df,
   annotation_row = anno_df,
-  annotation_colors = anno_colors        
+  annotation_colors = anno_colors,
+  annotation_names_row = FALSE,
+  annotation_names_col = FALSE,
+  fontsize = 5,         
+  fontsize_row = 4,      
+  fontsize_col = 4,     
+  angle_col = "45",     
+  treeheight_row = 15,  
+  treeheight_col = 15,   
+  border_color = NA,
+  cellwidth = 4.8,   
+  cellheight = 4.8
 )
-plt
 
-ggsave("./pictures_transpl/transpl_distance_heatmap.svg", plot = plt, width = 9, height = 6, dpi = 300, bg = "white")
+ggsave("./pictures_transpl/transpl_distance_heatmap.svg", plot = plot_hm, width = 9, height = 6, dpi = 500, bg = "white")
 ```
 ## Likelihood Ratio Test ##
 **Multi-Group Analysis (LRT). Performing a Likelihood Ratio Test comparing the full model (~ condition) against an intercept-only reduced model (~ 1) to identify miRNAs whose expression significantly changes in at least one group compared to all others.**
@@ -452,4 +531,88 @@ summary(res_all)
 res_all_sign <- as.data.frame(subset(res_all, padj < 0.05 & !is.na(padj)))
 res_all_sign
 ```
+**Combined Figure 1**
+```{r}
+plot_bars <- plot_bars + 
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 5), 
+    legend.key.size = unit(3, "mm"), 
+    legend.text = element_text(size = 5), 
+    legend.title = element_text(size = 6, face = "bold")
+  )
+
+plot_pca <- plot_pca + 
+  theme(
+    legend.key.size = unit(3, "mm"),
+    legend.text = element_text(size = 5)
+  )
+
+plot_hm <- as.ggplot(plot_hm) 
+
+combined_figure <- (plot_bars | plot_pca) / 
+                   (plot_hm | plot_venn)
+
+final_figure <- combined_figure + 
+  plot_annotation(tag_levels = 'A') & 
+  theme(
+    plot.tag = element_text(family = "Tahoma", face = "bold", size = 10),
+    plot.margin = margin(3, 3, 3, 3, "mm")
+  )
+
+ggsave(
+  "./pictures_transpl/126281-g001.svg", 
+  plot = final_figure, 
+  width = 168,       
+  height = 120, 
+  units = "mm", 
+  bg = "white"
+)
+
+ggsave(
+  "./pictures_transpl/126281-g001.png", 
+  plot = final_figure, 
+  width = 168,       
+  height = 120,
+  units = "mm", 
+  dpi = 600, 
+  bg = "white"
+)
+final_figure
+```
+**Combined Figure 2**
+```{r}
+combined_figure <- (res_AMR_vs_NR$plot | res_AMR_vs_CAV$plot) / 
+                   (res_AMR_vs_NR_adj$plot | res_AMR_vs_ACR$plot) + 
+
+  plot_layout(guides = "collect") +
+  plot_annotation(tag_levels = 'A') & 
+  
+  theme(
+    legend.position = "bottom",
+    legend.title = element_blank(),
+    plot.tag = element_text(family = "Tahoma", face = "bold", size = 10),
+    plot.margin = margin(5, 5, 5, 5, "mm")
+  )
+
+ggsave(
+  "./pictures_transpl/126281-g002.png", 
+  plot = combined_figure, 
+  width = 168, 
+  height = 200, 
+  units = "mm", 
+  dpi = 600, 
+  bg = "white"
+)
+ggsave(
+  "./pictures_transpl/126281-g002.svg", 
+  plot = combined_figure, 
+  width = 168, 
+  height = 200, 
+  units = "mm", 
+  dpi = 600, 
+  bg = "white"
+)
+combined_figure
+```
+
 
