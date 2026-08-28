@@ -1,8 +1,13 @@
 ---
 title: "micro-RNA Heart Transplantation - Enrichment analysis"
 output:
+  html_document:
+    df_print: paged
   html_notebook: default
 ---
+```{r}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
 ## Setup & Libraries ##
 ```{r}
 library(ggplot2)
@@ -19,14 +24,14 @@ library(clusterProfiler)
 ```
 
 ## Enrichment analysis ##
-**MIMAT ID Conversion**
+**MIMAT ID Conversion**   
 Converting mature miRNA names to MIMAT Accession IDs using miRBase to ensure accurate querying against target databases.
 ```{r}
 mirs <- miRNAVersionConvert(c("hsa-miR-125b-5p",
                               "hsa-miR-193b-5p", "hsa-miR-5588-5p"))$Accession
 mirs
 ```
-**Validated Targets Retrieval**
+**Validated Targets Retrieval**   
 Retrieving experimentally validated miRNA-target interactions strictly from the miRTarBase database using the multiMiR package, filtering out empty gene symbols.
 ```{r}
 mm_val <- get_multimir(
@@ -43,7 +48,7 @@ df_val <- mm_val@data %>%
 
 unique(df_val$mature_mirna_id)
 ```
-**Gene ID Mapping**
+**Gene ID Mapping**   
 Converting target gene SYMBOLs to ENTREZ IDs via clusterProfiler to prepare the data for downstream pathway enrichment analysis.
 ```{r}
 entrez_ids <- bitr(
@@ -53,13 +58,13 @@ entrez_ids <- bitr(
   OrgDb = org.Hs.eg.db
 )
 ```
-**Merging Mapped IDs**
+**Merging Mapped IDs**    
 Joining the ENTREZ IDs back to the original target data frame.
 ```{r}
 df_mapped <- dplyr::inner_join(df_val, entrez_ids, by = c("target_symbol" = "SYMBOL"))
 df_mapped
 ```
-**Target Gene Summary**
+**Target Gene Summary**   
 Calculating the total number of unique validated target genes for each candidate miRNA to evaluate their regulatory scope.
 ```{r}
 miRNA_summary <- df_mapped %>%
@@ -72,7 +77,7 @@ miRNA_summary <- df_mapped %>%
 
 print(miRNA_summary)
 ```
-**Comparative Enrichment Analysis, Figure 3**
+**Comparative Enrichment Analysis, Figure 3**   
 Performing functional enrichment analysis across candidate miRNAs for Gene Ontology (Biological Processes) and Reactome Pathways to identify overrepresented biological functions.
 ```{r}
 # --- Gene Ontology (Biological processes) ---
@@ -93,7 +98,7 @@ comp_reactome <- compareCluster(
   pvalueCutoff = 0.05
 )
 ```
-**Enrichment Visualization**
+**Enrichment Visualization**    
 Generating and merging dot plots for GO and Reactome enrichment results, adjusting label length for readability, and exporting the combined figure to SVG format.
 ```{r}
 safe_colors <- list(

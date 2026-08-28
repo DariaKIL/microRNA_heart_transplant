@@ -4,6 +4,10 @@ output:
   html_document:
     keep_md: no
 ---
+
+```{r}
+knitr::opts_chunk$set(warning = FALSE, message = FALSE)
+```
 ## Setup & Libraries ##
 ```{r}
 library(ggplot2)
@@ -43,7 +47,7 @@ head(counts)
 anno <- read.csv("data/anno_report.csv", header = TRUE, sep = ",")
 anno
 ```
-**Merging & Summarization**
+**Merging & Summarization**   
 Calculating the sum of reads for each RNA type across every clinical condition (NR, ACR, AMR, CAV)
 ```{r}
 merged_df <- left_join(anno, coldata, by = c("Sample.name.s." = "sample"))
@@ -54,7 +58,7 @@ summed_anno <- merged_df %>%
 
 summed_anno
 ```
-**Total read counts stratified by RNA type for each sample, Figure 1A**
+**Total read counts stratified by RNA type for each sample, Figure 1A**   
 Generating a stacked bar plot of the absolute read counts (in millions) across various RNA biotypes for each sample, faceted by clinical group.
 ```{r}
 library(showtext)
@@ -110,9 +114,7 @@ print(plot_bars)
 ggsave("./pictures_transpl/plot_distr.png", plot = plot_bars, 
        width = 168, height = 110, units = "mm", dpi = 500, bg = "white")
 ```
-
-
-**Additional calculations**
+**Additional calculations**   
 Computing the total sum of reads for each sample
 ```{r}
 cols <- names(anno) != "Sample.name.s."
@@ -121,14 +123,14 @@ anno["total", cols] <- colSums(anno[, cols], na.rm = TRUE)
 anno["total", "Sample.name.s."] <- "total"
 anno
 ```
-**Percentage Distribution of RNA Biotypes**
+**Percentage Distribution of RNA Biotypes**   
 Calculating the percentage of each small RNA class relative to the total number of reads in the entire experiment.
 ```{r}
 total_vec <- anno["total", setdiff(names(anno), "Sample.name.s.")]
 total_pct <- total_vec / sum(total_vec) * 100
 total_pct
 ```
-**Sequencing Depth per Group**
+**Sequencing Depth per Group**  
 Aggregating the total number of reads for each clinical group (used to describe cohort characteristics in the manuscript text).
 ```{r}
 summed_anno_plt <- summed_anno %>%
@@ -140,10 +142,10 @@ reads_before <- summed_anno_plt %>%
 reads_before
 ```
 ## Differential Expression Analysis ##
-**Custom Functions for DESeq2 Automation**
-Creating two custom functions:
-_run_deseq_pipeline_ — sets the reference group, applies a low-count filter (minimum of 10 reads in at least 3 samples), and runs the DESeq2 model.
-_extract_and_plot_ — extracts comparison results, applies apeglm shrinkage for LFC correction, filters significant miRNAs, and generates a Volcano Plot.
+**Custom Functions for DESeq2 Automation**  
+Creating two custom functions:  
+_run_deseq_pipeline_ — sets the reference group, applies a low-count filter (minimum of 10 reads in at least 3 samples), and runs the DESeq2 model.  
+_extract_and_plot_ — extracts comparison results, applies apeglm shrinkage for LFC correction, filters significant miRNAs, and generates a Volcano Plot. 
 ```{r}
 run_deseq_pipeline <- function(counts_mat, metadata, design_formula, ref_level) {
   metadata$condition <- relevel(factor(metadata$condition), ref = ref_level)
@@ -204,7 +206,7 @@ extract_and_plot <- function(dds, target_coef, plot_title, save_path) {
   ))
 }
 ```
-### Pairwise Comparisons with the Normal Reference (NR as Reference) ###
+### Pairwise Comparisons with the Normal Reference (NR as Reference) ###  
 **Differential expression analysis for Antibody-Mediated Rejection (AMR vs NR), Figure 2A**
 ```{r}
 dds_nr_ref <- run_deseq_pipeline(counts, coldata, ~ condition, "NR")
@@ -312,11 +314,9 @@ res_AMR_vs_ACR$plot
 ```
 ```{r}
 res_AMR_vs_ACR$sig_raw
-write.csv(res_AMR_vs_ACR$sig_raw, "res_AMR_vs_ACR.csv", row.names = TRUE)
 ```
 ```{r}
 res_AMR_vs_ACR$sig_shrunken
-write.csv(res_AMR_vs_ACR$sig_shrunken, "res_AMR_vs_ACR_shr.csv", row.names = TRUE)
 ```
 **Changing the baseline to ACR to identify differences between rejection types (CAV vs ACR)**
 ```{r}
@@ -344,11 +344,9 @@ res_AMR_vs_CAV$plot
 ```
 ```{r}
 res_AMR_vs_CAV$sig_raw
-write.csv(res_AMR_vs_CAV$sig_raw, "res_AMR_vs_CAV.csv", row.names = TRUE)
 ```
 ```{r}
 res_AMR_vs_CAV$sig_shrunken 
-write.csv(res_AMR_vs_CAV$sig_shrunken, "res_AMR_vs_CAV_shr.csv", row.names = TRUE)
 ```
 **Changing the baseline to CAV to evaluate ACR vs CAV**
 ```{r}
@@ -381,7 +379,7 @@ res_AMR_vs_NR_adj$sig_raw
 res_AMR_vs_NR_adj$sig_shrunken
 ```
 ## Venn Diagram ##
-**Venn diagram showing the overlap of filtered miRNAs among the clinical groups, Figure 1D**
+**Venn diagram showing the overlap of filtered miRNAs among the clinical groups, Figure 1D**  
 Applying a global noise filter to the raw counts and identifying the lists of miRNAs confidently expressed in each clinical group to build an intersection diagram
 ```{r}
 keep_global <- rowSums(counts >= 10) >= 3
@@ -422,14 +420,14 @@ plot_venn <- plot_venn +
 print(plot_venn)
 ggsave("./pictures_transpl/venna_plot.svg", plot = plot_venn, width = 8, height = 6, dpi = 500, bg = "white")
 ```
-## Unsupervised Clustering & PCA ##
-**Applying a regularized logarithm (rlog) transformation to the DESeq2 object to stabilize the variance prior to clustering methods. The meanSdPlot confirms the removal of variance dependence on the mean**
+## Unsupervised Clustering & PCA ##   
+Applying a regularized logarithm (rlog) transformation to the DESeq2 object to stabilize the variance prior to clustering methods. The meanSdPlot confirms the removal of variance dependence on the mean
 ```{r}
 rlt <- rlog(dds_nr_ref)
 meanSdPlot(assay(rlt)) 
 ```
-## Principal Component Analysis (PCA) ##
-**Principal component analysis (PCA) of filtered miRNA expression profiles according to clinical group and the presence of contemporaneous anti-HLAs, Figure 1B**
+## Principal Component Analysis ##  
+**Principal component analysis (PCA) of filtered miRNA expression profiles according to clinical group and the presence of contemporaneous anti-HLAs, Figure 1B**   
 Generating a PCA plot to evaluate the global segregation of samples in a 2D space based on their expression profiles. Colors encode the clinical group, and shapes represent the antibody status
 ```{r}
 pcaData <- plotPCA(rlt, intgroup=c("condition", "antibody"), returnData = TRUE)
@@ -476,7 +474,7 @@ plot_pca
 ggsave("./pictures_transpl/transpl_PCA_plot.svg", plot = plot_pca, width = 8, height = 6, dpi = 500, bg = "white")
 ```
 ## Sample Distance Heatmap ##
-**Distance-based heatmap of inter-sample correlations, annotated by clinical group and contemporaneous anti-HLA antibody status, Figure 1C**
+**Distance-based heatmap of inter-sample correlations, annotated by clinical group and contemporaneous anti-HLA antibody status, Figure 1C**  
 Calculating the Euclidean distance between all samples and generating a heatmap with hierarchical clustering to visualize patient similarities
 ```{r}
 #Calculate distances and convert to matrix
@@ -522,8 +520,8 @@ plot_hm <- pheatmap(
 
 ggsave("./pictures_transpl/transpl_distance_heatmap.svg", plot = plot_hm, width = 9, height = 6, dpi = 500, bg = "white")
 ```
-## Likelihood Ratio Test ##
-**Multi-Group Analysis (LRT). Performing a Likelihood Ratio Test comparing the full model (~ condition) against an intercept-only reduced model (~ 1) to identify miRNAs whose expression significantly changes in at least one group compared to all others.**
+## Likelihood Ratio Test ##    
+Multi-Group Analysis (LRT). Performing a Likelihood Ratio Test comparing the full model (~ condition) against an intercept-only reduced model (~ 1) to identify miRNAs whose expression significantly changes in at least one group compared to all others.
 ```{r}
 dds_lrt <- DESeq(dds_nr_ref, test = "LRT", reduced = ~ 1)
 
@@ -617,5 +615,3 @@ ggsave(
 )
 combined_figure
 ```
-
-
